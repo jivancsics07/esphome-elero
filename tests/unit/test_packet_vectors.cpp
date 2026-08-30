@@ -147,7 +147,7 @@ TEST(PayloadEncoding, EncodePayload_AllCommands) {
   using namespace esphome::elero::protocol;
 
   using namespace esphome::elero::packet;
-  uint8_t commands[] = {command::CHECK, command::STOP, command::UP, command::TILT, command::DOWN, command::INTERMEDIATE};
+  uint8_t commands[] = {command::CHECK, command::STOP, command::UP, command::VENTILATION, command::DOWN, command::DOWN_NO_TILT};
 
   for (uint8_t cmd : commands) {
     SCOPED_TRACE("Command: " + std::to_string(cmd));

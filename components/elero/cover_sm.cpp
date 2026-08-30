@@ -182,9 +182,9 @@ State on_command(const State &state, uint8_t cmd_byte, uint32_t now,
 
     return std::visit(overloaded{
         [&](const Idle &) -> State {
-            if (cmd == packet::command::UP || cmd == packet::command::TILT)
+            if (cmd == packet::command::UP || cmd == packet::command::TILT_UP)
                 return Opening{pos, now};
-            if (cmd == packet::command::DOWN)
+            if (cmd == packet::command::DOWN || cmd == packet::command::TILT_DOWN)
                 return Closing{pos, now};
             return state;  // CHECK, STOP while idle — no change
         },
@@ -192,7 +192,7 @@ State on_command(const State &state, uint8_t cmd_byte, uint32_t now,
         [&](const Opening &) -> State {
             if (cmd == packet::command::STOP)
                 return Stopping{pos, now};
-            if (cmd == packet::command::DOWN)
+            if (cmd == packet::command::DOWN || cmd == packet::command::TILT_DOWN)
                 return Closing{pos, now};  // Reverse
             return state;
         },
@@ -200,16 +200,16 @@ State on_command(const State &state, uint8_t cmd_byte, uint32_t now,
         [&](const Closing &) -> State {
             if (cmd == packet::command::STOP)
                 return Stopping{pos, now};
-            if (cmd == packet::command::UP || cmd == packet::command::TILT)
+            if (cmd == packet::command::UP || cmd == packet::command::TILT_UP)
                 return Opening{pos, now};  // Reverse
             return state;
         },
 
         [&](const Stopping &) -> State {
             // User commands override cooldown
-            if (cmd == packet::command::UP || cmd == packet::command::TILT)
+            if (cmd == packet::command::UP || cmd == packet::command::TILT_UP)
                 return Opening{pos, now};
-            if (cmd == packet::command::DOWN)
+            if (cmd == packet::command::DOWN || cmd == packet::command::TILT_DOWN)
                 return Closing{pos, now};
             return state;
         },

@@ -14,9 +14,9 @@
 ///   [7-9]=src [10-12]=bwd [13-15]=fwd [16]=ndst [17-19]=dst
 ///   [20-21]=payload1,2 [22-29]=encrypted(crypto,cmd,pad,parity)
 ///
-/// Quick Reference - Commands:
-///   CHECK=0x00  STOP=0x10  UP=0x20  TILT=0x24  DOWN=0x40  INT=0x44
-///   TILT_UP=0x20  TILT_DOWN=0x40  (slat step; same bytes as UP/DOWN)
+/// Quick Reference - Commands (Raffstore/venetian variant, see below):
+///   CHECK=0x00  STOP=0x10  TILT_UP=0x20  UP=0x21  VENTILATION=0x24
+///   TILT_DOWN=0x40  DOWN_NO_TILT=0x41  DOWN=0x44
 
 #pragma once
 
@@ -90,26 +90,39 @@ constexpr uint8_t ADDR_3BYTE_THRESHOLD = 0x60;  ///< Types > this use 3-byte add
 // ═══════════════════════════════════════════════════════════════════════════════
 
 namespace command {
+// ─── LOCAL FORK: Raffstore/venetian command bytes ───────────────────────────
+//
+// These motors use Elero's extended byte set, where a short press steps the
+// slats and a long press starts a full travel. Upstream's defaults (UP = 0x20,
+// DOWN = 0x40) are the short-press bytes here, so upstream can only ever nudge
+// the slats — the blind never travels.
+//
+//   0x10  stop
+//   0x20  tilt step open (short up)
+//   0x21  full travel up (long up)
+//   0x24  restore saved tilt / ventilation position
+//   0x40  tilt step closed (short down)
+//   0x41  full down, no tilt
+//   0x44  full down + restore tilt
+//
+// Sources: Elero transmitter-stick documentation;
+// https://github.com/andyboeh/esphome-elero/issues/4
+//
+// Confirmed against 7 Schlotterer-badged Elero Raffstore blinds.
+//
+// NOT upstreamable: this is a per-installation choice, and changing a global
+// constant would break every other user's motors. The upstream fix is
+// per-device configurable command bytes —
+// https://github.com/manuschillerdev/esphome-elero/issues/63
 constexpr uint8_t CHECK = 0x00;               ///< Request status (no movement)
 constexpr uint8_t STOP = 0x10;                ///< Stop movement
-constexpr uint8_t UP = 0x20;                  ///< Move up / open
-constexpr uint8_t TILT = 0x24;                ///< Tilt position
-constexpr uint8_t DOWN = 0x40;                ///< Move down / close
-constexpr uint8_t INTERMEDIATE = 0x44;        ///< Move to intermediate position
+constexpr uint8_t TILT_UP = 0x20;             ///< Step slats open (short up)
+constexpr uint8_t UP = 0x21;                  ///< Move up / open (full travel)
+constexpr uint8_t VENTILATION = 0x24;         ///< Restore saved tilt/ventilation position
+constexpr uint8_t TILT_DOWN = 0x40;           ///< Step slats closed (short down)
+constexpr uint8_t DOWN_NO_TILT = 0x41;        ///< Move down fully, no tilt restore
+constexpr uint8_t DOWN = 0x44;                ///< Move down / close (full travel + tilt)
 constexpr uint8_t INVALID = 0xFF;             ///< Invalid/unknown command marker
-
-/// Directional slat step, used by DeviceRegistry::command_cover_tilt().
-///
-/// On an Elero hand transmitter a short press steps the slats one notch and a
-/// long press starts a full travel. Both press lengths send the same command
-/// byte on the default variant, so TILT_UP/TILT_DOWN alias UP/DOWN by value.
-/// They exist as separate names because the two meanings diverge on venetian
-/// (Raffstore) motors that use the extended byte set, where the full-travel
-/// commands move to 0x21/0x44 and 0x20/0x40 stay slat steps.
-///
-/// @see https://github.com/andyboeh/esphome-elero/issues/4
-constexpr uint8_t TILT_UP = UP;               ///< Step slats open (short up)
-constexpr uint8_t TILT_DOWN = DOWN;           ///< Step slats closed (short down)
 }  // namespace command
 
 // ═══════════════════════════════════════════════════════════════════════════════

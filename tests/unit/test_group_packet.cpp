@@ -229,7 +229,7 @@ TEST(GroupPacketBuilding, AllCommandsRoundtrip) {
   uint8_t channels[] = {1, 3};
   uint8_t commands[] = {
     command::CHECK, command::STOP, command::UP,
-    command::TILT, command::DOWN, command::INTERMEDIATE,
+    command::VENTILATION, command::DOWN, command::DOWN_NO_TILT,
     button::RELEASE
   };
 

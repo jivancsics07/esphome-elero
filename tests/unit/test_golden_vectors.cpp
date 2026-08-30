@@ -111,10 +111,12 @@ TEST(GoldenConstants, MessageTypes) {
 TEST(GoldenConstants, CommandBytes) {
   EXPECT_EQ(command::CHECK, golden::CMD_CHECK);
   EXPECT_EQ(command::STOP, golden::CMD_STOP);
-  EXPECT_EQ(command::UP, golden::CMD_UP);
-  EXPECT_EQ(command::TILT, golden::CMD_TILT);
-  EXPECT_EQ(command::DOWN, golden::CMD_DOWN);
-  EXPECT_EQ(command::INTERMEDIATE, golden::CMD_INT);
+  // LOCAL FORK: the golden bytes are unchanged, but this installation's motors
+  // give them the Raffstore meanings, so the names they map to have moved.
+  EXPECT_EQ(command::TILT_UP, golden::CMD_UP);
+  EXPECT_EQ(command::VENTILATION, golden::CMD_TILT);
+  EXPECT_EQ(command::TILT_DOWN, golden::CMD_DOWN);
+  EXPECT_EQ(command::DOWN, golden::CMD_INT);
 }
 
 TEST(GoldenConstants, StateBytes) {
@@ -250,7 +252,7 @@ TEST(GoldenTxPacket, PayloadLayout_BeforeEncrypt) {
 
   TxParams params;
   params.counter = 1;
-  params.command = command::UP;  // 0x20
+  params.command = command::UP;
   params.payload_1 = 0x00;
   params.payload_2 = 0x04;
 
@@ -288,7 +290,7 @@ TEST(GoldenTxPacket, PayloadLayout_BeforeEncrypt) {
   EXPECT_EQ(buf[21], 0x04);  // payload_2
   EXPECT_EQ(buf[22], (code >> 8) & 0xFF);  // crypto_hi
   EXPECT_EQ(buf[23], code & 0xFF);         // crypto_lo
-  EXPECT_EQ(buf[24], golden::CMD_UP);      // command
+  EXPECT_EQ(buf[24], command::UP);         // command (layout test, not the byte value)
   EXPECT_EQ(buf[25], 0);     // padding
   EXPECT_EQ(buf[26], 0);     // padding
   EXPECT_EQ(buf[27], 0);     // padding
