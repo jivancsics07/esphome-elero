@@ -50,6 +50,7 @@ jobs:
           - test.esp32-minimal
           - test.esp32-mqtt
           - test.esp32-nvs
+          - test.esp32-c6-idf
     steps:
       - uses: actions/checkout@v4
 
