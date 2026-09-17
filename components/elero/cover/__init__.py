@@ -33,6 +33,7 @@ CONF_COMMAND_DOWN = "command_down"
 CONF_COMMAND_STOP = "command_stop"
 CONF_COMMAND_CHECK = "command_check"
 CONF_COMMAND_TILT = "command_tilt"
+CONF_COMMAND_TILT_CLOSE = "command_tilt_close"
 CONF_POLL_INTERVAL = "poll_interval"
 CONF_SUPPORTS_TILT = "supports_tilt"
 CONF_AUTO_SENSORS = "auto_sensors"
@@ -133,6 +134,10 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_COMMAND_STOP, default=0x10): cv.hex_int_range(min=0x0, max=0xFF),
             cv.Optional(CONF_COMMAND_CHECK, default=0x00): cv.hex_int_range(min=0x0, max=0xFF),
             cv.Optional(CONF_COMMAND_TILT, default=0x24): cv.hex_int_range(min=0x0, max=0xFF),
+            # Optional: second command for the opposite tilt/wend direction (e.g. Schlotterer/
+            # elero Jalousien where a short UP/DOWN press only wends the slats). If omitted,
+            # behaviour is unchanged: tilt=0 only updates local state, no RF command is sent.
+            cv.Optional(CONF_COMMAND_TILT_CLOSE): cv.hex_int_range(min=0x0, max=0xFF),
             cv.Optional(CONF_SUPPORTS_TILT, default=False): cv.boolean,
             cv.Optional(CONF_ASSUMED_STATE, default=True): cv.boolean,
             cv.Optional(CONF_AUTO_SENSORS, default=True): cv.boolean,
@@ -197,6 +202,8 @@ async def to_code(config):
     cg.add(var.set_command_check(config[CONF_COMMAND_CHECK]))
     cg.add(var.set_command_stop(config[CONF_COMMAND_STOP]))
     cg.add(var.set_command_tilt(config[CONF_COMMAND_TILT]))
+    if CONF_COMMAND_TILT_CLOSE in config:
+        cg.add(var.set_command_tilt_close(config[CONF_COMMAND_TILT_CLOSE]))
     cg.add(var.set_poll_interval(config[CONF_POLL_INTERVAL]))
     cg.add(var.set_supports_tilt(config[CONF_SUPPORTS_TILT]))
     cg.add(var.set_assumed_state(config[CONF_ASSUMED_STATE]))

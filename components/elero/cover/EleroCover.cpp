@@ -24,6 +24,10 @@ void EleroCover::dump_config() {
     ESP_LOGCONFIG(TAG, "  Close Duration: %lums", static_cast<unsigned long>(this->close_duration_));
   ESP_LOGCONFIG(TAG, "  Poll Interval: %lums", static_cast<unsigned long>(this->poll_intvl_));
   ESP_LOGCONFIG(TAG, "  Supports Tilt: %s", YESNO(this->supports_tilt_));
+  if (this->has_tilt_close_) {
+    ESP_LOGCONFIG(TAG, "  Tilt Open Command: 0x%02x", this->command_tilt_);
+    ESP_LOGCONFIG(TAG, "  Tilt Close Command: 0x%02x", this->command_tilt_close_);
+  }
   ESP_LOGCONFIG(TAG, "  Assumed State: %s", YESNO(this->assumed_state_));
 }
 
@@ -534,6 +538,11 @@ void EleroCover::control(const cover::CoverCall &call) {
     if(tilt > 0) {
       if (intent_was_accepted(this->submit_intent({CommandIntentKind::TILT, 0})))
         this->tilt = 1.0;
+    } else if (this->has_tilt_close_) {
+      // Second wend direction configured (command_tilt_close): send it as a raw
+      // custom command byte, same RF profile (address/channel/payload) as OPEN/CLOSE.
+      if (intent_was_accepted(this->submit_intent(CommandIntent::custom(this->command_tilt_close_))))
+        this->tilt = 0.0;
     } else {
       this->tilt = 0.0;
     }

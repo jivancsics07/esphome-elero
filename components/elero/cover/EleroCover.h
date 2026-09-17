@@ -32,6 +32,13 @@ class EleroCover : public cover::Cover, public Component, public EleroBlindBase 
   void set_command_stop(uint8_t cmd) { this->command_stop_ = cmd; }
   void set_command_check(uint8_t cmd) { this->command_check_ = cmd; }
   void set_command_tilt(uint8_t cmd) { this->command_tilt_ = cmd; }
+  // Optional second tilt command for the opposite wend direction (e.g. Schlotterer/elero
+  // Jalousien where a short UP/DOWN press only tilts the slats). If never set, behaviour
+  // is unchanged from upstream: tilt=0 only updates local state, no RF command is sent.
+  void set_command_tilt_close(uint8_t cmd) {
+    this->command_tilt_close_ = cmd;
+    this->has_tilt_close_ = true;
+  }
   void set_poll_offset(uint32_t offset) override { this->poll_offset_ = offset; }
   void set_close_duration(uint32_t dur) { this->close_duration_ = dur; }
   void set_open_duration(uint32_t dur) { this->open_duration_ = dur; }
@@ -132,6 +139,8 @@ class EleroCover : public cover::Cover, public Component, public EleroBlindBase 
   uint8_t command_check_{0x00};
   uint8_t command_stop_{0x10};
   uint8_t command_tilt_{0x24};
+  bool has_tilt_close_{false};
+  uint8_t command_tilt_close_{0x00};
   CommandIntentDelivery delivery_;
   cover::CoverOperation last_operation_{cover::COVER_OPERATION_OPENING};
   uint32_t stop_verify_at_{0};          // millis() when to poll for stop confirmation (0 = inactive)
