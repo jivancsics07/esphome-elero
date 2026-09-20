@@ -36,6 +36,8 @@ cover:
     open_duration: 25s
     close_duration: 22s
     poll_interval: 5min
+    supports_tilt: true
+    command_tilt_close: 0x25
   - platform: elero
     id: cover_wohnzimmer
     blind_address: 0xb72c4a
@@ -45,6 +47,8 @@ cover:
     open_duration: 30s
     close_duration: 27s
     poll_interval: 5min
+    supports_tilt: true
+    command_tilt_close: 0x25
 
 light:
   - platform: elero

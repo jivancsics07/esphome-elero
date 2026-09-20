@@ -459,7 +459,7 @@ All endpoints are served at `http://<device-ip>/elero`. CORS is restricted to sa
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/elero/api/covers/0xADDRESS/command` | POST | Send command to cover (`{"cmd": "up"\|"down"\|"stop"\|"tilt"}`) |
+| `/elero/api/covers/0xADDRESS/command` | POST | Send command to cover (`{"cmd": "up"\|"down"\|"stop"\|"tilt"\|"tilt_close"}`; `tilt_close` only takes effect when `command_tilt_close` is configured) |
 | `/elero/api/covers/0xADDRESS/settings` | POST | Update cover settings at runtime (timing/poll) |
 | `/elero/api/lights/0xADDRESS/command` | POST | Send command to light (`{"cmd": "on"\|"off"\|"stop"}`) |
 

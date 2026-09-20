@@ -264,6 +264,10 @@ CommandDeliveryConfig EleroCover::get_command_delivery_config() const {
   config.mapping.stop = this->command_stop_;
   config.mapping.check = this->command_check_;
   config.mapping.tilt = this->command_tilt_;
+  if (this->has_tilt_close_) {
+    config.mapping.tilt_close = this->command_tilt_close_;
+    config.mapping.has_tilt_close = true;
+  }
   return config;
 }
 
@@ -301,6 +305,12 @@ IntentSubmitResult EleroCover::submit_control_intent(const CommandIntent &intent
       const auto result = this->submit_intent(intent);
       if (intent_was_accepted(result))
         this->tilt = 1.0f;
+      return result;
+    }
+    case CommandIntentKind::TILT_CLOSE: {
+      const auto result = this->submit_intent(intent);
+      if (intent_was_accepted(result))
+        this->tilt = 0.0f;
       return result;
     }
     default:
@@ -539,9 +549,10 @@ void EleroCover::control(const cover::CoverCall &call) {
       if (intent_was_accepted(this->submit_intent({CommandIntentKind::TILT, 0})))
         this->tilt = 1.0;
     } else if (this->has_tilt_close_) {
-      // Second wend direction configured (command_tilt_close): send it as a raw
-      // custom command byte, same RF profile (address/channel/payload) as OPEN/CLOSE.
-      if (intent_was_accepted(this->submit_intent(CommandIntent::custom(this->command_tilt_close_))))
+      // Second wend direction configured (command_tilt_close). Submitted as the
+      // semantic TILT_CLOSE intent (not CUSTOM) so it shares TILT's coalescing/
+      // target-replacement behavior in CommandIntentDelivery.
+      if (intent_was_accepted(this->submit_intent({CommandIntentKind::TILT_CLOSE, 0})))
         this->tilt = 0.0;
     } else {
       this->tilt = 0.0;
@@ -709,6 +720,10 @@ void EleroCover::prepare_group_intent(const CommandIntent &intent, float target_
       break;
     case CommandIntentKind::TILT:
       this->tilt = 1.0f;
+      this->publish_state();
+      break;
+    case CommandIntentKind::TILT_CLOSE:
+      this->tilt = 0.0f;
       this->publish_state();
       break;
     default:

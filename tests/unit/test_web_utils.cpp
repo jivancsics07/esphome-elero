@@ -124,6 +124,8 @@ TEST(ParseCommandIntent, CoverAliasesRemainSemantic) {
   EXPECT_EQ(intent.kind, CommandIntentKind::CLOSE);
   EXPECT_TRUE(parse_cover_intent("tilt", intent));
   EXPECT_EQ(intent.kind, CommandIntentKind::TILT);
+  EXPECT_TRUE(parse_cover_intent("tilt_close", intent));
+  EXPECT_EQ(intent.kind, CommandIntentKind::TILT_CLOSE);
   EXPECT_TRUE(parse_cover_intent("int", intent));
   EXPECT_EQ(intent.kind, CommandIntentKind::CUSTOM);
   EXPECT_EQ(intent.custom_byte, 0x44);

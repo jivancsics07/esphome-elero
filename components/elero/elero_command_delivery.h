@@ -65,6 +65,10 @@ enum class CommandIntentKind : uint8_t {
   STOP,
   CHECK,
   TILT,
+  // Second wend/tilt direction (e.g. Schlotterer/elero Jalousien where a short
+  // UP/DOWN press only tilts the slats the opposite way). Only meaningful when
+  // CommandMapping::has_tilt_close is set; see CommandMapping::resolve().
+  TILT_CLOSE,
   ON,
   OFF,
   DIM_UP,
@@ -90,6 +94,11 @@ struct CommandMapping {
   uint8_t stop{0x10};
   uint8_t check{0x00};
   uint8_t tilt{0x24};
+  // Second wend/tilt command byte. Only resolved/matched when has_tilt_close is
+  // true — an unconfigured tilt_close must never alias command byte 0x00 (which
+  // is also the default `check` byte).
+  uint8_t tilt_close{0x00};
+  bool has_tilt_close{false};
   uint8_t on{0x20};
   uint8_t off{0x40};
   uint8_t dim_up{0x20};
@@ -102,6 +111,7 @@ struct CommandMapping {
       case CommandIntentKind::STOP: return this->stop;
       case CommandIntentKind::CHECK: return this->check;
       case CommandIntentKind::TILT: return this->tilt;
+      case CommandIntentKind::TILT_CLOSE: return this->tilt_close;
       case CommandIntentKind::ON: return this->on;
       case CommandIntentKind::OFF: return this->off;
       case CommandIntentKind::DIM_UP: return this->dim_up;
@@ -123,6 +133,8 @@ inline CommandIntent cover_intent_for_command_byte(const CommandMapping &mapping
     return {CommandIntentKind::CHECK, 0};
   if (value == mapping.tilt)
     return {CommandIntentKind::TILT, 0};
+  if (mapping.has_tilt_close && value == mapping.tilt_close)
+    return {CommandIntentKind::TILT_CLOSE, 0};
   return CommandIntent::custom(value);
 }
 

@@ -64,6 +64,7 @@ inline bool parse_cover_intent(const std::string &value, CommandIntent &intent) 
   else if (value == "stop") intent = {CommandIntentKind::STOP, 0};
   else if (value == "check") intent = {CommandIntentKind::CHECK, 0};
   else if (value == "tilt") intent = {CommandIntentKind::TILT, 0};
+  else if (value == "tilt_close") intent = {CommandIntentKind::TILT_CLOSE, 0};
   else if (value == "int") intent = CommandIntent::custom(0x44);
   else return false;
   return true;

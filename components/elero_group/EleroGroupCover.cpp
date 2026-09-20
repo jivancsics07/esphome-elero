@@ -93,8 +93,16 @@ void EleroGroupCover::control(const cover::CoverCall &call) {
     }
     this->publish_state();
   }
-  if (call.get_tilt().has_value() && *call.get_tilt() > 0)
-    this->submit_group_intent_({CommandIntentKind::TILT, 0});
+  if (call.get_tilt().has_value()) {
+    if (*call.get_tilt() > 0) {
+      this->submit_group_intent_({CommandIntentKind::TILT, 0});
+    } else if (this->all_members_support_tilt_close_()) {
+      // Only submit the second wend direction when every member has it
+      // configured — a member without command_tilt_close would otherwise
+      // resolve TILT_CLOSE to an unconfigured (default 0x00) command byte.
+      this->submit_group_intent_({CommandIntentKind::TILT_CLOSE, 0});
+    }
+  }
   if (call.get_toggle().has_value()) {
     if (this->current_operation != cover::COVER_OPERATION_IDLE) {
       if (intent_was_accepted(this->submit_group_intent_({CommandIntentKind::STOP, 0})))
@@ -234,6 +242,16 @@ bool EleroGroupCover::can_use_native_group_() const {
   for (auto *member : this->members_)
     configs.push_back(member->get_command_delivery_config());
   return group_delivery_policy::native_profiles_compatible(configs);
+}
+
+bool EleroGroupCover::all_members_support_tilt_close_() const {
+  if (this->members_.empty())
+    return false;
+  for (auto *member : this->members_) {
+    if (!member->get_command_delivery_config().mapping.has_tilt_close)
+      return false;
+  }
+  return true;
 }
 
 CommandDeliveryConfig EleroGroupCover::build_native_config_() const {
