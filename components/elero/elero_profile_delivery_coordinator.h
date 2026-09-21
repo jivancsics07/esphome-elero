@@ -477,7 +477,6 @@ class ProfileDeliveryCoordinator {
 
 inline bool CommandIntentDelivery::is_target_(CommandIntentKind kind) {
   return kind == CommandIntentKind::OPEN || kind == CommandIntentKind::CLOSE ||
-         kind == CommandIntentKind::TILT || kind == CommandIntentKind::TILT_CLOSE ||
          kind == CommandIntentKind::ON || kind == CommandIntentKind::OFF ||
          kind == CommandIntentKind::DIM_UP || kind == CommandIntentKind::DIM_DOWN;
 }
@@ -485,8 +484,6 @@ inline bool CommandIntentDelivery::is_target_(CommandIntentKind kind) {
 inline bool CommandIntentDelivery::conflicts_(CommandIntentKind current, CommandIntentKind next) {
   return ((current == CommandIntentKind::OPEN || current == CommandIntentKind::CLOSE) &&
           (next == CommandIntentKind::OPEN || next == CommandIntentKind::CLOSE)) ||
-         ((current == CommandIntentKind::TILT || current == CommandIntentKind::TILT_CLOSE) &&
-          (next == CommandIntentKind::TILT || next == CommandIntentKind::TILT_CLOSE)) ||
          ((current == CommandIntentKind::ON || current == CommandIntentKind::OFF) &&
           (next == CommandIntentKind::ON || next == CommandIntentKind::OFF)) ||
          ((current == CommandIntentKind::DIM_UP || current == CommandIntentKind::DIM_DOWN) &&

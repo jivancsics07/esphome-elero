@@ -24,10 +24,7 @@ void EleroCover::dump_config() {
     ESP_LOGCONFIG(TAG, "  Close Duration: %lums", static_cast<unsigned long>(this->close_duration_));
   ESP_LOGCONFIG(TAG, "  Poll Interval: %lums", static_cast<unsigned long>(this->poll_intvl_));
   ESP_LOGCONFIG(TAG, "  Supports Tilt: %s", YESNO(this->supports_tilt_));
-  if (this->has_tilt_close_) {
-    ESP_LOGCONFIG(TAG, "  Tilt Open Command: 0x%02x", this->command_tilt_);
-    ESP_LOGCONFIG(TAG, "  Tilt Close Command: 0x%02x", this->command_tilt_close_);
-  } else if (this->tilt_close_pulse_duration_ > 0) {
+  if (this->tilt_close_pulse_duration_ > 0) {
     ESP_LOGCONFIG(TAG, "  Tilt Close: CLOSE pulse, %lums auto-stop",
                   static_cast<unsigned long>(this->tilt_close_pulse_duration_));
   }
@@ -275,10 +272,6 @@ CommandDeliveryConfig EleroCover::get_command_delivery_config() const {
   config.mapping.stop = this->command_stop_;
   config.mapping.check = this->command_check_;
   config.mapping.tilt = this->command_tilt_;
-  if (this->has_tilt_close_) {
-    config.mapping.tilt_close = this->command_tilt_close_;
-    config.mapping.has_tilt_close = true;
-  }
   return config;
 }
 
@@ -316,12 +309,6 @@ IntentSubmitResult EleroCover::submit_control_intent(const CommandIntent &intent
       const auto result = this->submit_intent(intent);
       if (intent_was_accepted(result))
         this->tilt = 1.0f;
-      return result;
-    }
-    case CommandIntentKind::TILT_CLOSE: {
-      const auto result = this->submit_intent(intent);
-      if (intent_was_accepted(result))
-        this->tilt = 0.0f;
       return result;
     }
     default:
@@ -559,12 +546,6 @@ void EleroCover::control(const cover::CoverCall &call) {
     if(tilt > 0) {
       if (intent_was_accepted(this->submit_intent({CommandIntentKind::TILT, 0})))
         this->tilt = 1.0;
-    } else if (this->has_tilt_close_) {
-      // Second wend direction configured (command_tilt_close). Submitted as the
-      // semantic TILT_CLOSE intent (not CUSTOM) so it shares TILT's coalescing/
-      // target-replacement behavior in CommandIntentDelivery.
-      if (intent_was_accepted(this->submit_intent({CommandIntentKind::TILT_CLOSE, 0})))
-        this->tilt = 0.0;
     } else if (this->tilt_close_pulse_duration_ > 0) {
       // No distinct RF byte for the close direction on this hardware: send the
       // normal CLOSE command and auto-stop it after tilt_close_pulse_duration_
@@ -743,10 +724,6 @@ void EleroCover::prepare_group_intent(const CommandIntent &intent, float target_
       break;
     case CommandIntentKind::TILT:
       this->tilt = 1.0f;
-      this->publish_state();
-      break;
-    case CommandIntentKind::TILT_CLOSE:
-      this->tilt = 0.0f;
       this->publish_state();
       break;
     default:

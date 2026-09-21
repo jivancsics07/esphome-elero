@@ -32,19 +32,11 @@ class EleroCover : public cover::Cover, public Component, public EleroBlindBase 
   void set_command_stop(uint8_t cmd) { this->command_stop_ = cmd; }
   void set_command_check(uint8_t cmd) { this->command_check_ = cmd; }
   void set_command_tilt(uint8_t cmd) { this->command_tilt_ = cmd; }
-  // Optional second tilt command for the opposite wend direction (e.g. Schlotterer/elero
-  // Jalousien where a short UP/DOWN press only tilts the slats). If never set, behaviour
-  // is unchanged from upstream: tilt=0 only updates local state, no RF command is sent.
-  void set_command_tilt_close(uint8_t cmd) {
-    this->command_tilt_close_ = cmd;
-    this->has_tilt_close_ = true;
-  }
-  // Alternative to command_tilt_close for hardware with no distinct RF byte
-  // for the second wend direction (e.g. Schlotterer Jalousien where a short
-  // DOWN press closes the slats before the blind itself starts moving).
-  // When set, tilt=0 sends the normal CLOSE command and auto-stops it after
-  // this duration instead of sending a (non-existent) second command byte.
-  // Ignored when command_tilt_close is also set. Zero disables it.
+  // Alternative for hardware with no distinct RF byte for the second wend
+  // direction (e.g. Schlotterer Jalousien where a short DOWN press closes the
+  // slats before the blind itself starts moving). When set, tilt=0 sends the
+  // normal CLOSE command and auto-stops it after this duration instead of
+  // only updating local state. Zero (default) disables it.
   void set_tilt_close_pulse_duration(uint32_t ms) { this->tilt_close_pulse_duration_ = ms; }
   void set_poll_offset(uint32_t offset) override { this->poll_offset_ = offset; }
   void set_close_duration(uint32_t dur) { this->close_duration_ = dur; }
@@ -146,8 +138,6 @@ class EleroCover : public cover::Cover, public Component, public EleroBlindBase 
   uint8_t command_check_{0x00};
   uint8_t command_stop_{0x10};
   uint8_t command_tilt_{0x24};
-  bool has_tilt_close_{false};
-  uint8_t command_tilt_close_{0x00};
   uint32_t tilt_close_pulse_duration_{0};  // 0 = disabled
   uint32_t tilt_close_pulse_at_{0};        // millis() to auto-stop the pulse (0 = inactive)
   CommandIntentDelivery delivery_;

@@ -491,42 +491,6 @@ TEST(CommandDelivery, BatchSubmissionPreservesMultiIntentOrder) {
   EXPECT_EQ(bytes, (std::vector<uint8_t>{0x20, 0x40}));
 }
 
-TEST(CommandDelivery, TiltAndTiltCloseFormOneCoalescingTargetFamily) {
-  AttachedDelivery delivery(config());
-  // Repeated identical tilt=0 calls (matching the CommandIntentDelivery::submit
-  // callers in EleroCover::control()) must dedupe instead of queueing multiple
-  // identical RF commands — this is what CUSTOM historically bypassed.
-  EXPECT_EQ(delivery.submit({CommandIntentKind::TILT_CLOSE, 0}), IntentSubmitResult::ACCEPTED);
-  EXPECT_EQ(delivery.submit({CommandIntentKind::TILT_CLOSE, 0}), IntentSubmitResult::COALESCED);
-  EXPECT_EQ(delivery.size(), 1u);
-
-  // TILT and TILT_CLOSE are one target family: the newer direction replaces an
-  // unsent older one instead of queueing both (mirrors OPEN/CLOSE).
-  EXPECT_EQ(delivery.submit({CommandIntentKind::TILT, 0}), IntentSubmitResult::COALESCED);
-  EXPECT_EQ(delivery.size(), 1u);
-
-  std::vector<uint8_t> bytes;
-  auto submit = [&](const t_elero_command &packet, bool) {
-    bytes.push_back(packet.payload[4]);
-    return SendResult::OK;
-  };
-  delivery.advance(1, 0, 1, submit);
-  EXPECT_EQ(bytes, (std::vector<uint8_t>{0x24}));  // default mapping.tilt, TILT_CLOSE replaced
-}
-
-TEST(CommandDelivery, TiltCloseResolvesOnlyWhenConfigured) {
-  auto mapping = config().mapping;
-  mapping.tilt_close = 0x40;
-  mapping.has_tilt_close = true;
-  EXPECT_EQ(cover_intent_for_command_byte(mapping, 0x40).kind, CommandIntentKind::TILT_CLOSE);
-  EXPECT_EQ(mapping.resolve({CommandIntentKind::TILT_CLOSE, 0}), 0x40);
-
-  // Unconfigured tilt_close (has_tilt_close == false) must never alias the
-  // default 0x00 byte onto TILT_CLOSE — that byte already means CHECK.
-  CommandMapping unconfigured{};
-  EXPECT_EQ(cover_intent_for_command_byte(unconfigured, 0x00).kind, CommandIntentKind::CHECK);
-}
-
 TEST(CommandDelivery, ButtonBytesPreserveStopUrgencyAndSemanticDeferral) {
   const auto mapping = config().mapping;
   EXPECT_EQ(cover_intent_for_command_byte(mapping, mapping.stop).kind, CommandIntentKind::STOP);

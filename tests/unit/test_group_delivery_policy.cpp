@@ -44,29 +44,6 @@ TEST(GroupDeliveryPolicy, PartialNativeFailureNeverFansOut) {
   EXPECT_EQ(after_native_outcome(outcome), Route::NONE);
 }
 
-TEST(GroupDeliveryPolicy, MismatchedTiltCloseConfigurationUsesMemberFallback) {
-  auto first = group_config(0x111111);
-  auto second = group_config(0x222222);
-  first.mapping.has_tilt_close = true;
-  first.mapping.tilt_close = 0x40;
-  // second has no command_tilt_close configured at all.
-  EXPECT_EQ(initial_route({first, second}, {CommandIntentKind::TILT_CLOSE, 0}), Route::MEMBERS);
-
-  second.mapping.has_tilt_close = true;
-  second.mapping.tilt_close = 0x41;  // different byte than `first`
-  EXPECT_EQ(initial_route({first, second}, {CommandIntentKind::TILT_CLOSE, 0}), Route::MEMBERS);
-}
-
-TEST(GroupDeliveryPolicy, MatchingTiltCloseConfigurationUsesNativeDelivery) {
-  auto first = group_config(0x111111);
-  auto second = group_config(0x222222);
-  first.mapping.has_tilt_close = true;
-  first.mapping.tilt_close = 0x40;
-  second.mapping.has_tilt_close = true;
-  second.mapping.tilt_close = 0x40;
-  EXPECT_EQ(initial_route({first, second}, {CommandIntentKind::TILT_CLOSE, 0}), Route::NATIVE);
-}
-
 TEST(GroupDeliveryPolicy, LocalNativeQueueRejectionPreservesNativeLaneOrder) {
   EXPECT_TRUE(reject_native_submit_without_fanout(IntentSubmitResult::REJECTED));
   EXPECT_FALSE(reject_native_submit_without_fanout(IntentSubmitResult::ACCEPTED));

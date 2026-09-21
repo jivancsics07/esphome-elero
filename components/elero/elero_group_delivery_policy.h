@@ -20,9 +20,7 @@ inline bool native_profiles_compatible(const std::vector<CommandDeliveryConfig> 
     const auto &other = configs[i];
     if (!command_profile::can_share_native_group(first.profile, other.profile) ||
         first.mapping.open != other.mapping.open || first.mapping.close != other.mapping.close ||
-        first.mapping.stop != other.mapping.stop || first.mapping.tilt != other.mapping.tilt ||
-        first.mapping.has_tilt_close != other.mapping.has_tilt_close ||
-        (first.mapping.has_tilt_close && first.mapping.tilt_close != other.mapping.tilt_close))
+        first.mapping.stop != other.mapping.stop || first.mapping.tilt != other.mapping.tilt)
       return false;
   }
   return true;

@@ -45,22 +45,19 @@ cover:
     remote_address: 0xf0d008
     name: "Cover No Position"
 
-  # Cover with tilt, including the optional second wend/tilt direction as a
-  # distinct RF command byte
+  # Cover with tilt
   - platform: elero
     blind_address: 0xc41a2c
     channel: 7
     remote_address: 0xf0d008
     name: "Cover With Tilt"
     supports_tilt: true
-    command_tilt_close: 0x25
     open_duration: 30s
     close_duration: 28s
     poll_interval: never
 
-  # Cover with tilt, second wend direction via a timed CLOSE-then-auto-STOP
-  # pulse instead of a distinct byte (hardware with no dedicated tilt-close
-  # command). Mutually exclusive with command_tilt_close.
+  # Cover with tilt and the second wend direction via a timed
+  # CLOSE-then-auto-STOP pulse (hardware with no dedicated tilt-close command)
   - platform: elero
     blind_address: 0xd52b3d
     channel: 8

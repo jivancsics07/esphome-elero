@@ -40,7 +40,6 @@ class EleroGroupCover : public cover::Cover, public Component {
   std::vector<group_position_logic::MemberState> member_position_states_() const;
   bool supports_group_position_() const;
   bool can_use_native_group_() const;
-  bool all_members_support_tilt_close_() const;
   CommandDeliveryConfig build_native_config_() const;
   void handle_native_outcome_(const DeliveryOutcome &outcome);
   void update_position_();

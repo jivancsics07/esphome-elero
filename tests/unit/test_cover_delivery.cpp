@@ -244,52 +244,9 @@ TEST_F(CoverDeliveryTest, GroupPartialStopThenTerminalFailureCannotLeaveVerifica
   EXPECT_STREQ(cover.result(), "stop_failed"); EXPECT_STREQ(other.result(), "stop_failed");
 }
 
-TEST_F(CoverDeliveryTest, TiltCloseSendsConfiguredByteAndDedupesRepeatedCalls) {
-  // Setters that feed get_command_delivery_config() must run before setup(),
-  // which snapshots the mapping into the (by-then-attached) delivery lane.
-  TestCover tilt_cover;
-  tilt_cover.set_elero_parent(&hub);
-  tilt_cover.set_blind_address(0x111111);
-  tilt_cover.set_remote_address(0x123456);
-  tilt_cover.set_poll_interval(300000);
-  tilt_cover.set_supports_tilt(true);
-  tilt_cover.set_command_tilt(0x24);
-  tilt_cover.set_command_tilt_close(0x25);
-  tilt_cover.setup();
-
-  // Both `cover` (the fixture default) and `tilt_cover` queue an initial
-  // status CHECK in setup(); drain those before exercising tilt commands.
-  for (uint32_t now = 1001; now <= 1004; now++) {
-    auto id = hub.advance(now);
-    if (id == 0) break;
-    EXPECT_EQ(hub.packets.back().payload[4], 0);
-    hub.complete(id, true, now + 1, timeline.fence(now + 1));
-  }
-
-  CoverCall tilt_open;
-  tilt_open.tilt = 1.0f;
-  tilt_cover.control(tilt_open);
-  transmit(1010);
-  EXPECT_EQ(hub.packets.back().payload[4], 0x24);
-  EXPECT_EQ(hub.packets.back().dest_addrs[0], 0x111111u);
-  EXPECT_FLOAT_EQ(tilt_cover.tilt, 1.0f);
-
-  CoverCall tilt_close;
-  tilt_close.tilt = 0.0f;
-  tilt_cover.control(tilt_close);
-  // A second identical tilt=0 call before the first transmits must dedupe
-  // instead of queueing a duplicate RF command (regression guard for the
-  // CUSTOM-bypasses-coalescing issue).
-  tilt_cover.control(tilt_close);
-  EXPECT_EQ(tilt_cover.get_command_delivery()->size(), 1u);
-  transmit(1020);
-  EXPECT_EQ(hub.packets.back().payload[4], 0x25);
-  EXPECT_FLOAT_EQ(tilt_cover.tilt, 0.0f);
-}
-
 TEST_F(CoverDeliveryTest, TiltClosePulseSendsCloseThenAutoStopsWithoutEarlyStop) {
-  // Alternative to command_tilt_close for hardware with no distinct RF byte:
-  // tilt=0 sends the normal CLOSE command and loop() auto-stops it after
+  // For hardware with no distinct RF byte for the close direction: tilt=0
+  // sends the normal CLOSE command and loop() auto-stops it after
   // tilt_close_pulse_duration_ elapses.
   TestCover pulse_cover;
   pulse_cover.set_elero_parent(&hub);
@@ -378,45 +335,6 @@ TEST_F(CoverDeliveryTest, TiltClosePulseIsCancelledByARealMovement) {
   test_now = 1010 + 600;
   pulse_cover.loop();
   EXPECT_EQ(pulse_cover.current_operation, cover::COVER_OPERATION_OPENING);
-}
-
-TEST_F(CoverDeliveryTest, GroupTiltClosePropagatesOnlyWhenEveryMemberSupportsIt) {
-  TestCover with_close;
-  with_close.set_elero_parent(&hub);
-  with_close.set_blind_address(0x111111);
-  with_close.set_remote_address(0x123456);
-  with_close.set_poll_interval(300000);
-  with_close.set_supports_tilt(true);
-  with_close.set_command_tilt(0x24);
-  with_close.set_command_tilt_close(0x25);
-  with_close.setup();
-
-  TestCover without_close;
-  without_close.set_elero_parent(&hub);
-  without_close.set_blind_address(0x222222);
-  without_close.set_remote_address(0x123456);
-  without_close.set_poll_interval(300000);
-  without_close.set_supports_tilt(true);
-  without_close.set_command_tilt(0x24);
-  // No command_tilt_close configured on this member.
-  without_close.setup();
-
-  TestGroup group;
-  group.set_elero_parent(&hub);
-  group.add_member(&with_close);
-  group.add_member(&without_close);
-  group.setup();
-
-  // Each member's own initial status CHECK (queued by its setup()) is already
-  // sitting in its queue; the group's gated TILT_CLOSE submission must not add
-  // to that — nothing should be submitted when one member lacks the config.
-  const auto with_close_baseline = with_close.get_command_delivery()->size();
-  const auto without_close_baseline = without_close.get_command_delivery()->size();
-  CoverCall tilt_close;
-  tilt_close.tilt = 0.0f;
-  group.control(tilt_close);
-  EXPECT_EQ(with_close.get_command_delivery()->size(), with_close_baseline);
-  EXPECT_EQ(without_close.get_command_delivery()->size(), without_close_baseline);
 }
 
 TEST_F(CoverDeliveryTest, ConcurrentSameProfileStopPreservesBothTwoPacketBursts) {
