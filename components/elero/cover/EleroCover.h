@@ -39,6 +39,13 @@ class EleroCover : public cover::Cover, public Component, public EleroBlindBase 
     this->command_tilt_close_ = cmd;
     this->has_tilt_close_ = true;
   }
+  // Alternative to command_tilt_close for hardware with no distinct RF byte
+  // for the second wend direction (e.g. Schlotterer Jalousien where a short
+  // DOWN press closes the slats before the blind itself starts moving).
+  // When set, tilt=0 sends the normal CLOSE command and auto-stops it after
+  // this duration instead of sending a (non-existent) second command byte.
+  // Ignored when command_tilt_close is also set. Zero disables it.
+  void set_tilt_close_pulse_duration(uint32_t ms) { this->tilt_close_pulse_duration_ = ms; }
   void set_poll_offset(uint32_t offset) override { this->poll_offset_ = offset; }
   void set_close_duration(uint32_t dur) { this->close_duration_ = dur; }
   void set_open_duration(uint32_t dur) { this->open_duration_ = dur; }
@@ -141,6 +148,8 @@ class EleroCover : public cover::Cover, public Component, public EleroBlindBase 
   uint8_t command_tilt_{0x24};
   bool has_tilt_close_{false};
   uint8_t command_tilt_close_{0x00};
+  uint32_t tilt_close_pulse_duration_{0};  // 0 = disabled
+  uint32_t tilt_close_pulse_at_{0};        // millis() to auto-stop the pulse (0 = inactive)
   CommandIntentDelivery delivery_;
   cover::CoverOperation last_operation_{cover::COVER_OPERATION_OPENING};
   uint32_t stop_verify_at_{0};          // millis() when to poll for stop confirmation (0 = inactive)

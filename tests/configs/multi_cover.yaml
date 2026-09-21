@@ -1,4 +1,4 @@
-# Multi-cover config: 3 covers with different settings
+# Multi-cover config: 4 covers with different settings
 # Tests: multiple cover registration, poll stagger, position tracking variations
 
 esphome:
@@ -45,7 +45,8 @@ cover:
     remote_address: 0xf0d008
     name: "Cover No Position"
 
-  # Cover with tilt, including the optional second wend/tilt direction
+  # Cover with tilt, including the optional second wend/tilt direction as a
+  # distinct RF command byte
   - platform: elero
     blind_address: 0xc41a2c
     channel: 7
@@ -55,4 +56,18 @@ cover:
     command_tilt_close: 0x25
     open_duration: 30s
     close_duration: 28s
+    poll_interval: never
+
+  # Cover with tilt, second wend direction via a timed CLOSE-then-auto-STOP
+  # pulse instead of a distinct byte (hardware with no dedicated tilt-close
+  # command). Mutually exclusive with command_tilt_close.
+  - platform: elero
+    blind_address: 0xd52b3d
+    channel: 8
+    remote_address: 0xf0d008
+    name: "Cover With Tilt Pulse"
+    supports_tilt: true
+    tilt_close_pulse_duration: 1200ms
+    open_duration: 27s
+    close_duration: 27s
     poll_interval: never

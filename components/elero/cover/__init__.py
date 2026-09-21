@@ -34,6 +34,7 @@ CONF_COMMAND_STOP = "command_stop"
 CONF_COMMAND_CHECK = "command_check"
 CONF_COMMAND_TILT = "command_tilt"
 CONF_COMMAND_TILT_CLOSE = "command_tilt_close"
+CONF_TILT_CLOSE_PULSE_DURATION = "tilt_close_pulse_duration"
 CONF_POLL_INTERVAL = "poll_interval"
 CONF_SUPPORTS_TILT = "supports_tilt"
 CONF_AUTO_SENSORS = "auto_sensors"
@@ -93,6 +94,24 @@ def _validate_duration_consistency(config):
     )
 
 
+def _validate_tilt_close_options(config):
+    """command_tilt_close and tilt_close_pulse_duration are mutually exclusive.
+
+    They are two different strategies for the same tilt=0 action (a distinct RF
+    byte vs. a timed CLOSE-then-auto-STOP pulse); setting both is ambiguous
+    configuration, not a supported combination.
+    """
+    pulse = config.get(CONF_TILT_CLOSE_PULSE_DURATION)
+    pulse_ms = pulse.total_milliseconds if pulse is not None else 0
+    if CONF_COMMAND_TILT_CLOSE in config and pulse_ms > 0:
+        raise cv.Invalid(
+            f"'{CONF_COMMAND_TILT_CLOSE}' and '{CONF_TILT_CLOSE_PULSE_DURATION}' are "
+            f"mutually exclusive: they are two different ways to handle tilt=0. "
+            f"Set only one."
+        )
+    return config
+
+
 def _auto_sensor_validator(config):
     """At validation time, inject auto-sensor sub-configs when auto_sensors=True.
 
@@ -138,6 +157,12 @@ CONFIG_SCHEMA = cv.All(
             # elero Jalousien where a short UP/DOWN press only wends the slats). If omitted,
             # behaviour is unchanged: tilt=0 only updates local state, no RF command is sent.
             cv.Optional(CONF_COMMAND_TILT_CLOSE): cv.hex_int_range(min=0x0, max=0xFF),
+            # Alternative to command_tilt_close for hardware with no distinct RF byte
+            # for the close direction (e.g. Schlotterer Jalousien where a short DOWN
+            # press closes the slats before the blind itself starts moving): send the
+            # normal CLOSE command and auto-stop it after this duration. Mutually
+            # exclusive with command_tilt_close. Default 0 disables it.
+            cv.Optional(CONF_TILT_CLOSE_PULSE_DURATION, default="0ms"): cv.positive_time_period_milliseconds,
             cv.Optional(CONF_SUPPORTS_TILT, default=False): cv.boolean,
             cv.Optional(CONF_ASSUMED_STATE, default=True): cv.boolean,
             cv.Optional(CONF_AUTO_SENSORS, default=True): cv.boolean,
@@ -148,6 +173,7 @@ CONFIG_SCHEMA = cv.All(
     )
     .extend(cv.COMPONENT_SCHEMA),
     _validate_duration_consistency,
+    _validate_tilt_close_options,
     _auto_sensor_validator,
 )
 
@@ -204,6 +230,8 @@ async def to_code(config):
     cg.add(var.set_command_tilt(config[CONF_COMMAND_TILT]))
     if CONF_COMMAND_TILT_CLOSE in config:
         cg.add(var.set_command_tilt_close(config[CONF_COMMAND_TILT_CLOSE]))
+    elif config[CONF_TILT_CLOSE_PULSE_DURATION].total_milliseconds > 0:
+        cg.add(var.set_tilt_close_pulse_duration(config[CONF_TILT_CLOSE_PULSE_DURATION]))
     cg.add(var.set_poll_interval(config[CONF_POLL_INTERVAL]))
     cg.add(var.set_supports_tilt(config[CONF_SUPPORTS_TILT]))
     cg.add(var.set_assumed_state(config[CONF_ASSUMED_STATE]))
