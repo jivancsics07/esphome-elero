@@ -15,13 +15,15 @@ esphome:
 
 external_components:
   - source: github://jivancsics07/esphome-elero@claude/clever-goldberg-qjzra4
-    components: [elero, elero_mqtt, elero_web]
+    components: [elero, elero_nvs, elero_web]  # or elero_mqtt
     refresh: 1d
 ```
 
-Then use the normal MQTT setup from the [README](README.md#2-choose-your-output-adapter)
-(`mqtt:` + `elero_mqtt:` + `elero_web:`). Do **not** enable `elero_nvs:` on this
-gateway.
+Then pick an output adapter as in the [README](README.md#2-choose-your-output-adapter):
+`api:` + `elero_nvs:` (native API) or `mqtt:` + `elero_mqtt:`, plus `elero_web:`.
+List the components you use in `components:`. `elero_nvs` compiles again since
+[#66](https://github.com/manuschillerdev/esphome-elero/pull/66), which fixed
+[#59](https://github.com/manuschillerdev/esphome-elero/issues/59).
 
 `components/elero_web/elero_web_ui.h` is committed on this branch, so the build
 does not need to fetch the pre-built web UI from a GitHub release. After changing
