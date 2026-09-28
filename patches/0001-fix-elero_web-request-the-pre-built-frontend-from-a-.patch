@@ -1,0 +1,129 @@
+From 3acb1e410569d4691b9c84167759b5049fae07c8 Mon Sep 17 00:00:00 2001
+From: Deyan Petrov <25847560+deyanp@users.noreply.github.com>
+Date: Sun, 30 Aug 2026 12:10:45 +0200
+Subject: [PATCH 1/6] fix(elero_web): request the pre-built frontend from a
+ release that has it
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+`ELERO_VERSION` was pinned at 0.9.0 while the released versions are 0.10.0 and
+0.10.1, so every build that had to fetch the frontend asked for
+
+  releases/download/v0.9.0/elero_web_ui.h
+
+which 404s — there has never been a v0.9.0 release. The download failure was
+only logged as a warning, so the build carried on and died several hundred
+steps later with:
+
+  elero_web_server.cpp:2:10: fatal error: elero_web_ui.h: No such file or directory
+
+Two fixes:
+
+1. `ELERO_VERSION` is now 0.10.1, the earliest release that publishes an
+   `elero_web_ui.h` asset (the upload step was added to release.yml after
+   v0.10.0 was cut).
+
+   The constant was already listed in release-please `extra-files`, but the
+   `x-release-please-version` annotation sat on its own line. release-please's
+   generic updater only substitutes a version *within the annotated line*, so
+   the constant was never bumped. Moving the annotation onto the version line
+   makes the mechanism work.
+
+2. A failed download now raises `EsphomeError` instead of logging a warning.
+   `elero_web_server.cpp` includes the header unconditionally, so a missing
+   file is always fatal — failing at the download surfaces the cause instead
+   of a bare missing-header error much later. The message names the URL tried
+   and the `pnpm build` fallback. A partial file left behind by `urlretrieve`
+   is removed so the next build retries cleanly.
+
+CI never caught this: the `build-frontend` job builds the header and passes it
+to the compile jobs as an artifact, so `_ensure_ui_header()` returns early and
+the download path is never exercised.
+
+Verified on ESPHome 2026.8.1 (esp-idf): with the header removed,
+`esphome compile tests/test.esp32-mqtt.yaml` downloads v0.10.1 successfully,
+and a deliberately wrong version fails immediately with the new message.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01J12Zptv6PA4jU97du7vmxZ
+(cherry picked from commit 863e76849cb9a5310bbce35b50721af2b73226cb)
+---
+ components/elero/__init__.py     |  8 ++++++--
+ components/elero_web/__init__.py | 27 +++++++++++++++++++--------
+ 2 files changed, 25 insertions(+), 10 deletions(-)
+
+diff --git a/components/elero/__init__.py b/components/elero/__init__.py
+index 0c49432..cfd7a90 100644
+--- a/components/elero/__init__.py
++++ b/components/elero/__init__.py
+@@ -7,8 +7,12 @@ from esphome.core import CORE
+ 
+ DEPENDENCIES = ["spi"]
+ 
+-# x-release-please-version
+-ELERO_VERSION = "0.9.0"
++# Version of the GitHub release whose pre-built frontend asset
++# (elero_web_ui.h) this source tree expects. release-please rewrites the
++# annotated line on every release — the annotation must stay on the same line
++# as the version string, because the updater only substitutes within the line
++# it is written on.
++ELERO_VERSION = "0.10.1"  # x-release-please-version
+ 
+ elero_ns = cg.esphome_ns.namespace("elero")
+ elero = elero_ns.class_("Elero", cg.Component)
+diff --git a/components/elero_web/__init__.py b/components/elero_web/__init__.py
+index 8e1a89a..dc7d847 100644
+--- a/components/elero_web/__init__.py
++++ b/components/elero_web/__init__.py
+@@ -6,6 +6,7 @@ import esphome.config_validation as cv
+ from esphome.components.elero import CONF_ELERO_ID, CONF_REGISTRY_ID, ELERO_VERSION, DeviceRegistry, elero, elero_ns
+ from esphome.components.logger import request_log_listener
+ from esphome.const import CONF_ID, CONF_PORT
++from esphome.core import EsphomeError
+ 
+ _LOGGER = logging.getLogger(__name__)
+ 
+@@ -57,7 +58,13 @@ def _ensure_mongoose():
+ 
+ 
+ def _ensure_ui_header():
+-    """Download the pre-built frontend header from the GitHub release."""
++    """Download the pre-built frontend header from the GitHub release.
++
++    elero_web_server.cpp includes this header unconditionally, so a missing
++    file is a hard build failure. Fail here, where the cause is visible,
++    rather than several hundred compile steps later with a bare
++    "elero_web_ui.h: No such file or directory".
++    """
+     if _UI_HEADER.exists():
+         return
+ 
+@@ -72,13 +79,17 @@ def _ensure_ui_header():
+     )
+     try:
+         urllib.request.urlretrieve(url, _UI_HEADER)
+-    except Exception:
+-        _LOGGER.warning(
+-            "Could not download %s — the web UI will not be available. "
+-            "For local development, run: "
+-            "cd components/elero_web/frontend/app && pnpm build",
+-            _UI_HEADER_FILENAME,
+-        )
++    except Exception as err:
++        # urlretrieve can leave a partial file behind on failure.
++        _UI_HEADER.unlink(missing_ok=True)
++        raise EsphomeError(
++            f"Could not download the pre-built web UI ({_UI_HEADER_FILENAME}) "
++            f"from {url}: {err}\n"
++            f"elero_web cannot be compiled without it. Either check that the "
++            f"v{ELERO_VERSION} release publishes {_UI_HEADER_FILENAME}, or "
++            f"build the frontend locally:\n"
++            f"  cd components/elero_web/frontend/app && pnpm install && pnpm build"
++        ) from err
+ 
+ 
+ async def to_code(config):
+-- 
+2.43.0
+

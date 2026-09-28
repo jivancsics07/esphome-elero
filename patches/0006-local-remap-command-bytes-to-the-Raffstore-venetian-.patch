@@ -1,0 +1,377 @@
+From 06956ba79f586dbf25e8442ce0ba9ffed951a5a6 Mon Sep 17 00:00:00 2001
+From: Deyan Petrov <25847560+deyanp@users.noreply.github.com>
+Date: Sun, 30 Aug 2026 21:09:53 +0200
+Subject: [PATCH 6/6] local: remap command bytes to the Raffstore/venetian
+ variant
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+NOT UPSTREAMABLE. This is a per-installation choice.
+
+The 7 Schlotterer-badged Elero Raffstore blinds in this house use Elero's
+extended command byte set, where a short press steps the slats and a long
+press starts a full travel:
+
+  0x10 stop          0x20 tilt step open    0x21 full travel up
+  0x24 ventilation   0x40 tilt step closed  0x41 full down, no tilt
+  0x44 full down + restore tilt
+
+Upstream's UP (0x20) and DOWN (0x40) are the short-press bytes here, so with
+upstream defaults Home Assistant can only nudge the slats — the blind never
+travels. Remap:
+
+  UP            0x20 -> 0x21
+  DOWN          0x40 -> 0x44
+  TILT_UP            =  0x20  (no longer an alias of UP)
+  TILT_DOWN          =  0x40  (no longer an alias of DOWN)
+  TILT          0x24 -> VENTILATION 0x24
+  INTERMEDIATE  0x44 -> DOWN_NO_TILT 0x41
+
+Follow-on renames in elero_strings.cpp and cover_sm.cpp, which can no longer
+rely on TILT_UP == UP. Unit tests updated for the new names; the golden vector
+layout test now compares against command::UP rather than the literal 0x20,
+because it checks the packet layout and not the byte value.
+
+Changing these globals would break every other user's motors, so upstream
+needs per-device configurable command bytes instead:
+https://github.com/manuschillerdev/esphome-elero/issues/63
+
+Sources: Elero transmitter-stick documentation;
+https://github.com/andyboeh/esphome-elero/issues/4
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01WLGnJvyZ5SZbn6476pe4UU
+---
+ components/elero/cover_sm.cpp        | 12 +++----
+ components/elero/elero_packet.h      | 53 +++++++++++++++++-----------
+ components/elero/elero_strings.cpp   | 12 +++----
+ tests/unit/test_cover_sm.cpp         | 10 +++---
+ tests/unit/test_golden_vectors.cpp   | 14 ++++----
+ tests/unit/test_group_packet.cpp     |  2 +-
+ tests/unit/test_packet_vectors.cpp   |  2 +-
+ tests/unit/test_parse_roundtrip.cpp  |  2 +-
+ tests/unit/test_string_functions.cpp | 16 ++++-----
+ 9 files changed, 69 insertions(+), 54 deletions(-)
+
+diff --git a/components/elero/cover_sm.cpp b/components/elero/cover_sm.cpp
+index 9bf116e..a8fd9f7 100644
+--- a/components/elero/cover_sm.cpp
++++ b/components/elero/cover_sm.cpp
+@@ -182,9 +182,9 @@ State on_command(const State &state, uint8_t cmd_byte, uint32_t now,
+ 
+     return std::visit(overloaded{
+         [&](const Idle &) -> State {
+-            if (cmd == packet::command::UP || cmd == packet::command::TILT)
++            if (cmd == packet::command::UP || cmd == packet::command::TILT_UP)
+                 return Opening{pos, now};
+-            if (cmd == packet::command::DOWN)
++            if (cmd == packet::command::DOWN || cmd == packet::command::TILT_DOWN)
+                 return Closing{pos, now};
+             return state;  // CHECK, STOP while idle — no change
+         },
+@@ -192,7 +192,7 @@ State on_command(const State &state, uint8_t cmd_byte, uint32_t now,
+         [&](const Opening &) -> State {
+             if (cmd == packet::command::STOP)
+                 return Stopping{pos, now};
+-            if (cmd == packet::command::DOWN)
++            if (cmd == packet::command::DOWN || cmd == packet::command::TILT_DOWN)
+                 return Closing{pos, now};  // Reverse
+             return state;
+         },
+@@ -200,16 +200,16 @@ State on_command(const State &state, uint8_t cmd_byte, uint32_t now,
+         [&](const Closing &) -> State {
+             if (cmd == packet::command::STOP)
+                 return Stopping{pos, now};
+-            if (cmd == packet::command::UP || cmd == packet::command::TILT)
++            if (cmd == packet::command::UP || cmd == packet::command::TILT_UP)
+                 return Opening{pos, now};  // Reverse
+             return state;
+         },
+ 
+         [&](const Stopping &) -> State {
+             // User commands override cooldown
+-            if (cmd == packet::command::UP || cmd == packet::command::TILT)
++            if (cmd == packet::command::UP || cmd == packet::command::TILT_UP)
+                 return Opening{pos, now};
+-            if (cmd == packet::command::DOWN)
++            if (cmd == packet::command::DOWN || cmd == packet::command::TILT_DOWN)
+                 return Closing{pos, now};
+             return state;
+         },
+diff --git a/components/elero/elero_packet.h b/components/elero/elero_packet.h
+index 45529f3..35b3bf8 100644
+--- a/components/elero/elero_packet.h
++++ b/components/elero/elero_packet.h
+@@ -14,9 +14,9 @@
+ ///   [7-9]=src [10-12]=bwd [13-15]=fwd [16]=ndst [17-19]=dst
+ ///   [20-21]=payload1,2 [22-29]=encrypted(crypto,cmd,pad,parity)
+ ///
+-/// Quick Reference - Commands:
+-///   CHECK=0x00  STOP=0x10  UP=0x20  TILT=0x24  DOWN=0x40  INT=0x44
+-///   TILT_UP=0x20  TILT_DOWN=0x40  (slat step; same bytes as UP/DOWN)
++/// Quick Reference - Commands (Raffstore/venetian variant, see below):
++///   CHECK=0x00  STOP=0x10  TILT_UP=0x20  UP=0x21  VENTILATION=0x24
++///   TILT_DOWN=0x40  DOWN_NO_TILT=0x41  DOWN=0x44
+ 
+ #pragma once
+ 
+@@ -90,26 +90,39 @@ constexpr uint8_t ADDR_3BYTE_THRESHOLD = 0x60;  ///< Types > this use 3-byte add
+ // ═══════════════════════════════════════════════════════════════════════════════
+ 
+ namespace command {
++// ─── LOCAL FORK: Raffstore/venetian command bytes ───────────────────────────
++//
++// These motors use Elero's extended byte set, where a short press steps the
++// slats and a long press starts a full travel. Upstream's defaults (UP = 0x20,
++// DOWN = 0x40) are the short-press bytes here, so upstream can only ever nudge
++// the slats — the blind never travels.
++//
++//   0x10  stop
++//   0x20  tilt step open (short up)
++//   0x21  full travel up (long up)
++//   0x24  restore saved tilt / ventilation position
++//   0x40  tilt step closed (short down)
++//   0x41  full down, no tilt
++//   0x44  full down + restore tilt
++//
++// Sources: Elero transmitter-stick documentation;
++// https://github.com/andyboeh/esphome-elero/issues/4
++//
++// Confirmed against 7 Schlotterer-badged Elero Raffstore blinds.
++//
++// NOT upstreamable: this is a per-installation choice, and changing a global
++// constant would break every other user's motors. The upstream fix is
++// per-device configurable command bytes —
++// https://github.com/manuschillerdev/esphome-elero/issues/63
+ constexpr uint8_t CHECK = 0x00;               ///< Request status (no movement)
+ constexpr uint8_t STOP = 0x10;                ///< Stop movement
+-constexpr uint8_t UP = 0x20;                  ///< Move up / open
+-constexpr uint8_t TILT = 0x24;                ///< Tilt position
+-constexpr uint8_t DOWN = 0x40;                ///< Move down / close
+-constexpr uint8_t INTERMEDIATE = 0x44;        ///< Move to intermediate position
++constexpr uint8_t TILT_UP = 0x20;             ///< Step slats open (short up)
++constexpr uint8_t UP = 0x21;                  ///< Move up / open (full travel)
++constexpr uint8_t VENTILATION = 0x24;         ///< Restore saved tilt/ventilation position
++constexpr uint8_t TILT_DOWN = 0x40;           ///< Step slats closed (short down)
++constexpr uint8_t DOWN_NO_TILT = 0x41;        ///< Move down fully, no tilt restore
++constexpr uint8_t DOWN = 0x44;                ///< Move down / close (full travel + tilt)
+ constexpr uint8_t INVALID = 0xFF;             ///< Invalid/unknown command marker
+-
+-/// Directional slat step, used by DeviceRegistry::command_cover_tilt().
+-///
+-/// On an Elero hand transmitter a short press steps the slats one notch and a
+-/// long press starts a full travel. Both press lengths send the same command
+-/// byte on the default variant, so TILT_UP/TILT_DOWN alias UP/DOWN by value.
+-/// They exist as separate names because the two meanings diverge on venetian
+-/// (Raffstore) motors that use the extended byte set, where the full-travel
+-/// commands move to 0x21/0x44 and 0x20/0x40 stay slat steps.
+-///
+-/// @see https://github.com/andyboeh/esphome-elero/issues/4
+-constexpr uint8_t TILT_UP = UP;               ///< Step slats open (short up)
+-constexpr uint8_t TILT_DOWN = DOWN;           ///< Step slats closed (short down)
+ }  // namespace command
+ 
+ // ═══════════════════════════════════════════════════════════════════════════════
+diff --git a/components/elero/elero_strings.cpp b/components/elero/elero_strings.cpp
+index 6eaa24b..be05ce3 100644
+--- a/components/elero/elero_strings.cpp
++++ b/components/elero/elero_strings.cpp
+@@ -52,11 +52,11 @@ const char *elero_command_to_string(uint8_t command) {
+       return "STOP";
+     case packet::command::UP:
+       return "UP";
+-    case packet::command::TILT:
++    case packet::command::TILT_UP:
+       return "TILT";
+     case packet::command::DOWN:
+       return "DOWN";
+-    case packet::command::INTERMEDIATE:
++    case packet::command::DOWN_NO_TILT:
+       return "INTERMEDIATE";
+     default:
+       return "UNKNOWN";
+@@ -75,9 +75,9 @@ uint8_t elero_action_to_command(const char *action) {
+   if (strcmp(action, action::CHECK) == 0)
+     return packet::command::CHECK;
+   if (strcmp(action, action::TILT) == 0)
+-    return packet::command::TILT;
++    return packet::command::TILT_UP;
+   if (strcmp(action, action::INT) == 0)
+-    return packet::command::INTERMEDIATE;
++    return packet::command::DOWN_NO_TILT;
+   return packet::command::INVALID;
+ }
+ 
+@@ -87,8 +87,8 @@ const char *elero_command_to_action(uint8_t cmd_byte) {
+     case packet::command::DOWN: return action::DOWN;
+     case packet::command::STOP: return action::STOP;
+     case packet::command::CHECK: return action::CHECK;
+-    case packet::command::TILT: return action::TILT;
+-    case packet::command::INTERMEDIATE: return action::INT;
++    case packet::command::TILT_UP: return action::TILT;
++    case packet::command::DOWN_NO_TILT: return action::INT;
+     default: return nullptr;
+   }
+ }
+diff --git a/tests/unit/test_cover_sm.cpp b/tests/unit/test_cover_sm.cpp
+index bb2cd76..f635c6b 100644
+--- a/tests/unit/test_cover_sm.cpp
++++ b/tests/unit/test_cover_sm.cpp
+@@ -325,7 +325,7 @@ TEST_F(CoverSmTest, ClosingCmdUpReversesWithSnapshotPosition) {
+ }
+ 
+ TEST_F(CoverSmTest, ClosingCmdTiltReversesToOpening) {
+-    auto s = sm::on_command(sm::Closing{1.0f, 0}, pkt::command::TILT, 5000, ctx);
++    auto s = sm::on_command(sm::Closing{1.0f, 0}, pkt::command::TILT_UP, 5000, ctx);
+     ASSERT_TRUE(std::holds_alternative<sm::Opening>(s));
+ }
+ 
+@@ -343,13 +343,13 @@ TEST_F(CoverSmTest, StoppingCmdOverridesCooldownWithCorrectPosition) {
+ 
+ TEST_F(CoverSmTest, IntermediateCommandIsNoOpInAllStates) {
+     EXPECT_TRUE(std::holds_alternative<sm::Idle>(
+-        sm::on_command(sm::Idle{0.5f}, pkt::command::INTERMEDIATE, 100, ctx)));
++        sm::on_command(sm::Idle{0.5f}, pkt::command::DOWN_NO_TILT, 100, ctx)));
+     EXPECT_TRUE(std::holds_alternative<sm::Opening>(
+-        sm::on_command(sm::Opening{0.5f, 0}, pkt::command::INTERMEDIATE, 100, ctx)));
++        sm::on_command(sm::Opening{0.5f, 0}, pkt::command::DOWN_NO_TILT, 100, ctx)));
+     EXPECT_TRUE(std::holds_alternative<sm::Closing>(
+-        sm::on_command(sm::Closing{0.5f, 0}, pkt::command::INTERMEDIATE, 100, ctx)));
++        sm::on_command(sm::Closing{0.5f, 0}, pkt::command::DOWN_NO_TILT, 100, ctx)));
+     EXPECT_TRUE(std::holds_alternative<sm::Stopping>(
+-        sm::on_command(sm::Stopping{0.5f, 0}, pkt::command::INTERMEDIATE, 100, ctx)));
++        sm::on_command(sm::Stopping{0.5f, 0}, pkt::command::DOWN_NO_TILT, 100, ctx)));
+ }
+ 
+ TEST_F(CoverSmTest, CmdUpWhileAlreadyOpeningIsNoOp) {
+diff --git a/tests/unit/test_golden_vectors.cpp b/tests/unit/test_golden_vectors.cpp
+index d4cfcdd..287a7de 100644
+--- a/tests/unit/test_golden_vectors.cpp
++++ b/tests/unit/test_golden_vectors.cpp
+@@ -111,10 +111,12 @@ TEST(GoldenConstants, MessageTypes) {
+ TEST(GoldenConstants, CommandBytes) {
+   EXPECT_EQ(command::CHECK, golden::CMD_CHECK);
+   EXPECT_EQ(command::STOP, golden::CMD_STOP);
+-  EXPECT_EQ(command::UP, golden::CMD_UP);
+-  EXPECT_EQ(command::TILT, golden::CMD_TILT);
+-  EXPECT_EQ(command::DOWN, golden::CMD_DOWN);
+-  EXPECT_EQ(command::INTERMEDIATE, golden::CMD_INT);
++  // LOCAL FORK: the golden bytes are unchanged, but this installation's motors
++  // give them the Raffstore meanings, so the names they map to have moved.
++  EXPECT_EQ(command::TILT_UP, golden::CMD_UP);
++  EXPECT_EQ(command::VENTILATION, golden::CMD_TILT);
++  EXPECT_EQ(command::TILT_DOWN, golden::CMD_DOWN);
++  EXPECT_EQ(command::DOWN, golden::CMD_INT);
+ }
+ 
+ TEST(GoldenConstants, StateBytes) {
+@@ -250,7 +252,7 @@ TEST(GoldenTxPacket, PayloadLayout_BeforeEncrypt) {
+ 
+   TxParams params;
+   params.counter = 1;
+-  params.command = command::UP;  // 0x20
++  params.command = command::UP;
+   params.payload_1 = 0x00;
+   params.payload_2 = 0x04;
+ 
+@@ -288,7 +290,7 @@ TEST(GoldenTxPacket, PayloadLayout_BeforeEncrypt) {
+   EXPECT_EQ(buf[21], 0x04);  // payload_2
+   EXPECT_EQ(buf[22], (code >> 8) & 0xFF);  // crypto_hi
+   EXPECT_EQ(buf[23], code & 0xFF);         // crypto_lo
+-  EXPECT_EQ(buf[24], golden::CMD_UP);      // command
++  EXPECT_EQ(buf[24], command::UP);         // command (layout test, not the byte value)
+   EXPECT_EQ(buf[25], 0);     // padding
+   EXPECT_EQ(buf[26], 0);     // padding
+   EXPECT_EQ(buf[27], 0);     // padding
+diff --git a/tests/unit/test_group_packet.cpp b/tests/unit/test_group_packet.cpp
+index b8a55c9..06609a3 100644
+--- a/tests/unit/test_group_packet.cpp
++++ b/tests/unit/test_group_packet.cpp
+@@ -229,7 +229,7 @@ TEST(GroupPacketBuilding, AllCommandsRoundtrip) {
+   uint8_t channels[] = {1, 3};
+   uint8_t commands[] = {
+     command::CHECK, command::STOP, command::UP,
+-    command::TILT, command::DOWN, command::INTERMEDIATE,
++    command::VENTILATION, command::DOWN, command::DOWN_NO_TILT,
+     button::RELEASE
+   };
+ 
+diff --git a/tests/unit/test_packet_vectors.cpp b/tests/unit/test_packet_vectors.cpp
+index 62f908d..3f52814 100644
+--- a/tests/unit/test_packet_vectors.cpp
++++ b/tests/unit/test_packet_vectors.cpp
+@@ -147,7 +147,7 @@ TEST(PayloadEncoding, EncodePayload_AllCommands) {
+   using namespace esphome::elero::protocol;
+ 
+   using namespace esphome::elero::packet;
+-  uint8_t commands[] = {command::CHECK, command::STOP, command::UP, command::TILT, command::DOWN, command::INTERMEDIATE};
++  uint8_t commands[] = {command::CHECK, command::STOP, command::UP, command::VENTILATION, command::DOWN, command::DOWN_NO_TILT};
+ 
+   for (uint8_t cmd : commands) {
+     SCOPED_TRACE("Command: " + std::to_string(cmd));
+diff --git a/tests/unit/test_parse_roundtrip.cpp b/tests/unit/test_parse_roundtrip.cpp
+index b6024f4..bdab65e 100644
+--- a/tests/unit/test_parse_roundtrip.cpp
++++ b/tests/unit/test_parse_roundtrip.cpp
+@@ -90,7 +90,7 @@ TEST(TxRxRoundtrip, BasicCommandPacket) {
+ TEST(TxRxRoundtrip, CommandSurvivesEncryption) {
+   // The critical test: does the command byte survive build -> parse?
+   uint8_t commands[] = {command::CHECK, command::STOP, command::UP,
+-                        command::TILT, command::DOWN, command::INTERMEDIATE};
++                        command::VENTILATION, command::DOWN, command::DOWN_NO_TILT};
+ 
+   for (uint8_t cmd : commands) {
+     SCOPED_TRACE("command: 0x" + std::to_string(cmd));
+diff --git a/tests/unit/test_string_functions.cpp b/tests/unit/test_string_functions.cpp
+index 0c74d94..2ac06aa 100644
+--- a/tests/unit/test_string_functions.cpp
++++ b/tests/unit/test_string_functions.cpp
+@@ -54,9 +54,9 @@ TEST(CommandToString, AllKnownCommands) {
+   EXPECT_STREQ(elero_command_to_string(command::CHECK), "CHECK");
+   EXPECT_STREQ(elero_command_to_string(command::STOP), "STOP");
+   EXPECT_STREQ(elero_command_to_string(command::UP), "UP");
+-  EXPECT_STREQ(elero_command_to_string(command::TILT), "TILT");
++  EXPECT_STREQ(elero_command_to_string(command::TILT_UP), "TILT");
+   EXPECT_STREQ(elero_command_to_string(command::DOWN), "DOWN");
+-  EXPECT_STREQ(elero_command_to_string(command::INTERMEDIATE), "INTERMEDIATE");
++  EXPECT_STREQ(elero_command_to_string(command::DOWN_NO_TILT), "INTERMEDIATE");
+ }
+ 
+ TEST(CommandToString, UnknownCommand) {
+@@ -73,8 +73,8 @@ TEST(ActionToCommand, PrimaryActions) {
+   EXPECT_EQ(elero_action_to_command("down"), command::DOWN);
+   EXPECT_EQ(elero_action_to_command("stop"), command::STOP);
+   EXPECT_EQ(elero_action_to_command("check"), command::CHECK);
+-  EXPECT_EQ(elero_action_to_command("tilt"), command::TILT);
+-  EXPECT_EQ(elero_action_to_command("int"), command::INTERMEDIATE);
++  EXPECT_EQ(elero_action_to_command("tilt"), command::TILT_UP);
++  EXPECT_EQ(elero_action_to_command("int"), command::DOWN_NO_TILT);
+ }
+ 
+ TEST(ActionToCommand, Aliases) {
+@@ -110,8 +110,8 @@ TEST(CommandToAction, AllKnownCommands) {
+   EXPECT_STREQ(elero_command_to_action(command::DOWN), "down");
+   EXPECT_STREQ(elero_command_to_action(command::STOP), "stop");
+   EXPECT_STREQ(elero_command_to_action(command::CHECK), "check");
+-  EXPECT_STREQ(elero_command_to_action(command::TILT), "tilt");
+-  EXPECT_STREQ(elero_command_to_action(command::INTERMEDIATE), "int");
++  EXPECT_STREQ(elero_command_to_action(command::TILT_UP), "tilt");
++  EXPECT_STREQ(elero_command_to_action(command::DOWN_NO_TILT), "int");
+ }
+ 
+ TEST(CommandToAction, UnknownCommand) {
+@@ -125,8 +125,8 @@ TEST(CommandToAction, RoundtripWithActionToCommand) {
+   EXPECT_EQ(elero_action_to_command(elero_command_to_action(command::DOWN)), command::DOWN);
+   EXPECT_EQ(elero_action_to_command(elero_command_to_action(command::STOP)), command::STOP);
+   EXPECT_EQ(elero_action_to_command(elero_command_to_action(command::CHECK)), command::CHECK);
+-  EXPECT_EQ(elero_action_to_command(elero_command_to_action(command::TILT)), command::TILT);
+-  EXPECT_EQ(elero_action_to_command(elero_command_to_action(command::INTERMEDIATE)), command::INTERMEDIATE);
++  EXPECT_EQ(elero_action_to_command(elero_command_to_action(command::TILT_UP)), command::TILT_UP);
++  EXPECT_EQ(elero_action_to_command(elero_command_to_action(command::DOWN_NO_TILT)), command::DOWN_NO_TILT);
+ }
+ 
+ // =============================================================================
+-- 
+2.43.0
+

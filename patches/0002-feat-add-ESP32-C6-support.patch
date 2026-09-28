@@ -1,0 +1,234 @@
+From 339fb317fc2fc12da7ed12fbf4ec9c1d3645b467 Mon Sep 17 00:00:00 2001
+From: Deyan Petrov <25847560+deyanp@users.noreply.github.com>
+Date: Sun, 30 Aug 2026 12:10:45 +0200
+Subject: [PATCH 2/6] feat: add ESP32-C6 support
+
+Adds an ESP32-C6 compile target, its device documentation, and moves CI onto a
+current ESPHome.
+
+Hardware verified: ESP32-C6-DevKitC-1 (ESP32-C6-WROOM-1) with a CC1101 868 MHz
+module. The firmware boots, joins WiFi, brings the CC1101 up (MARCSTATE=0x0d,
+RX), and receives valid Elero frames with `crc_ok: true` at the default
+frequency preset.
+
+- `tests/test.esp32-c6-idf.yaml`, modelled on `test.esp32-mqtt.yaml`. Chip
+  select is on GPIO6, not the GPIO5 used by the generic ESP32 wiring: GPIO5 is
+  a strapping pin on the C6 (ESPHome's own strapping set for the part is
+  {4, 5, 8, 9, 15}). GDO0 is on GPIO3.
+
+- `test.esp32-c6-idf` added to the `esphome-compile` matrix.
+
+- `docs/devices/esp32-c6-cc1101.md` with the C6 pinout, the strapping-pin
+  warning, the CC1101 3.3 V-only warning, and the frequency preset table.
+  Linked from the README device list.
+
+- CI container moved from `ghcr.io/esphome/esphome:2026.2.2` to `2026.8.1`, and
+  the `esphome==` dev pin moved to match. `requires-python` goes to >=3.12
+  because ESPHome 2026.8.1 requires it, and `uv.lock` is regenerated. The stale
+  pin is why the `logger::LogListener` removal went unnoticed.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01J12Zptv6PA4jU97du7vmxZ
+(cherry picked from commit af3877f63d93f6ff141eab171ca3742078b8c713)
+---
+ .github/workflows/ci.yml        |  1 +
+ README.md                       |  1 +
+ docs/devices/esp32-c6-cc1101.md | 98 +++++++++++++++++++++++++++++++++
+ tests/test.esp32-c6-idf.yaml    | 56 +++++++++++++++++++
+ 4 files changed, 156 insertions(+)
+ create mode 100644 docs/devices/esp32-c6-cc1101.md
+ create mode 100644 tests/test.esp32-c6-idf.yaml
+
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 5db481a..874ce8a 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -50,6 +50,7 @@ jobs:
+           - test.esp32-minimal
+           - test.esp32-mqtt
+           - test.esp32-nvs
++          - test.esp32-c6-idf
+     steps:
+       - uses: actions/checkout@v4
+ 
+diff --git a/README.md b/README.md
+index 6e790be..4e6a165 100644
+--- a/README.md
++++ b/README.md
+@@ -17,6 +17,7 @@ remain supported. See [ESPHome compatibility](docs/ESPHOME-COMPATIBILITY.md) for
+ Pick a device config for your board:
+ 
+ - [ESP32 + CC1101](docs/devices/esp32-cc1101.md) -- generic ESP32 with external CC1101 module
++- [ESP32-C6 + CC1101](docs/devices/esp32-c6-cc1101.md) -- ESP32-C6 with external CC1101 module
+ - [Heltec WiFi LoRa 32 V4](docs/devices/heltec-lora-v4.md) -- onboard SX1262 (experimental)
+ - [LILYGO LoRa32 V2.1](docs/devices/lilygo-lora32-sx1276.md) -- onboard SX1276 (experimental)
+ - [LilyGO T-Embed](docs/devices/lilygo-t-embed.md) -- onboard CC1101
+diff --git a/docs/devices/esp32-c6-cc1101.md b/docs/devices/esp32-c6-cc1101.md
+new file mode 100644
+index 0000000..723ae44
+--- /dev/null
++++ b/docs/devices/esp32-c6-cc1101.md
+@@ -0,0 +1,98 @@
++# ESP32-C6 + CC1101
++
++ESP32-C6 dev board (ESP32-C6-DevKitC-1, ESP32-C6-WROOM-1) with a CC1101 868 MHz
++RF module connected over SPI.
++
++The C6 is a RISC-V part, so its GPIO map and strapping pins differ from the
++Xtensa ESP32. The wiring below is the generic ESP32 wiring with the chip select
++moved off a strapping pin.
++
++## Wiring
++
++| CC1101 | ESP32-C6 | Function |
++|--------|----------|----------|
++| VCC | 3V3 | Power (3.3V only!) |
++| GND | GND | Ground |
++| SCK | GPIO18 | SPI clock |
++| MOSI | GPIO23 | SPI data out |
++| MISO | GPIO19 | SPI data in |
++| CSN | GPIO6 | SPI chip select |
++| GDO0 | GPIO3 | Interrupt pin |
++
++GDO2 is not used. SPI pins are configurable -- any valid GPIO works.
++
++> **WARNING:** The CC1101 operates at **3.3V**. Never connect it to 5V!
++
++### Strapping pins
++
++**GPIO5 is a strapping pin on the ESP32-C6** and must not be used for chip
++select, which is why this wiring uses GPIO6. The generic ESP32 config in
++[esp32-cc1101.md](esp32-cc1101.md) puts CSN on GPIO5 -- do not copy that pin
++onto a C6.
++
++Pins to avoid on the ESP32-C6:
++
++| GPIO | Function | ESPHome behaviour |
++|------|----------|-------------------|
++| 4, 5 | Strapping -- JTAG signal source select | Warns |
++| 8, 9 | Strapping -- boot mode (GPIO9 is the BOOT button) | Warns |
++| 15 | Strapping -- ROM message printing | Warns |
++| 12, 13 | USB Serial/JTAG data lines | Warns |
++| 24-30 | SPI flash / PSRAM | Rejected |
++
++Attaching a CC1101 to a strapping pin can leave the board unable to boot.
++Valid GPIO numbers on the C6 are 0-30.
++
++## ESPHome Config
++
++The C6 requires the **ESP-IDF** framework. There is no Arduino core for it in
++ESPHome.
++
++```yaml
++esp32:
++  board: esp32-c6-devkitc-1
++  framework:
++    type: esp-idf
++
++spi:
++  clk_pin: GPIO18
++  mosi_pin: GPIO23
++  miso_pin: GPIO19
++
++elero:
++  cs_pin: GPIO6
++  gdo0_pin: GPIO3
++```
++
++## Frequency
++
++The default register preset works with the Elero motors tested on this board.
++If discovery finds nothing, try the alternative preset:
++
++| Preset | freq2 | freq1 | freq0 | Carrier |
++|---|---|---|---|---|
++| Standard (default) | `0x21` | `0x71` | `0x7a` | 869.525 MHz |
++| Alternative | `0x21` | `0x71` | `0xc0` | 869.553 MHz |
++
++Carrier values are computed from the CC1101 `FREQ2`/`FREQ1`/`FREQ0` registers
++with the module's 26 MHz crystal.
++
++```yaml
++elero:
++  cs_pin: GPIO6
++  gdo0_pin: GPIO3
++  freq0: 0xc0    # alternative preset
++  freq1: 0x71
++  freq2: 0x21
++```
++
++## Verifying the radio
++
++With `logger.level: DEBUG`, a working CC1101 reports `MARCSTATE=0x0d` (RX) after
++setup, and received Elero frames are logged with `crc_ok: true`.
++
++## Known issues
++
++Log lines that print `uint32_t` values with `%u` or `%x` are garbled on the C6.
++`uint32_t` is `long unsigned int` on RISC-V, so those format specifiers do not
++match. This is cosmetic -- it affects log output only, not RF behaviour.
+diff --git a/tests/test.esp32-c6-idf.yaml b/tests/test.esp32-c6-idf.yaml
+new file mode 100644
+index 0000000..8fdcdb5
+--- /dev/null
++++ b/tests/test.esp32-c6-idf.yaml
+@@ -0,0 +1,56 @@
++# ESPHome compile test: ESP32-C6 with ESP-IDF framework
++# Target hardware: ESP32-C6-DevKitC-1 (ESP32-C6-WROOM-1) + CC1101 868 MHz module
++#
++# GPIO5 is a strapping pin on the ESP32-C6, so the chip select moves to GPIO6
++# instead of the GPIO5 used by the generic ESP32 wiring.
++substitutions:
++  spi_clk: GPIO18
++  spi_mosi: GPIO23
++  spi_miso: GPIO19
++  spi_cs: GPIO6
++  gdo0_pin: GPIO3
++
++esphome:
++  name: test-esp32-c6-idf
++  friendly_name: Test ESP32-C6 IDF
++
++esp32:
++  board: esp32-c6-devkitc-1
++  framework:
++    type: esp-idf
++
++logger:
++  level: DEBUG
++
++wifi:
++  ssid: "test-network"
++  password: ""
++
++external_components:
++  - source:
++      type: local
++      path: ../components
++
++spi:
++  clk_pin: ${spi_clk}
++  mosi_pin: ${spi_mosi}
++  miso_pin: ${spi_miso}
++
++# MQTT broker (required for elero_mqtt)
++mqtt:
++  broker: 192.168.1.100
++
++# Elero hub (no YAML covers/lights — devices managed via MQTT)
++elero:
++  cs_pin: ${spi_cs}
++  gdo0_pin: ${gdo0_pin}
++
++# MQTT adapter with NVS persistence
++elero_mqtt:
++  topic_prefix: elero
++  discovery_prefix: homeassistant
++  device_name: "Elero Gateway"
++
++# Web UI for RF discovery and device management
++elero_web:
++  port: 80
+-- 
+2.43.0
+

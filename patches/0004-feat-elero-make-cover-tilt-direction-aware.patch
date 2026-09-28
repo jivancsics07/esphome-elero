@@ -1,0 +1,169 @@
+From 618c02c53e5fe91d7dc4f38656375b71716a320f Mon Sep 17 00:00:00 2001
+From: Deyan Petrov <25847560+deyanp@users.noreply.github.com>
+Date: Sun, 30 Aug 2026 21:02:14 +0200
+Subject: [PATCH 4/6] feat(elero): make cover tilt direction-aware
+
+`command_cover_tilt()` took no direction and always sent `command::TILT`
+(0x24), and the MQTT handler dropped the payload. Home Assistant renders
+both tilt buttons for a cover with `supports_tilt`, but only one of them
+could ever have an effect, and 0x24 is the motor's saved ventilation
+position rather than a directional slat step.
+
+Take the requested tilt position at both call sites and send a directional
+slat step: `TILT_UP` when the request is in the upper half of the range,
+`TILT_DOWN` otherwise.
+
+`TILT_UP`/`TILT_DOWN` are added as names for the existing UP/DOWN bytes,
+so nothing changes for covers without tilt. They are separate names because
+the meanings diverge on venetian motors that use Elero's extended byte set,
+where full travel moves to 0x21/0x44 and 0x20/0x40 stay slat steps.
+
+`cover_sm::on_command` needs no change: it already maps 0x20 to Opening and
+0x40 to Closing.
+
+`command::TILT` (0x24) stays reachable through the `tilt` action on the
+cover command topic, so the ventilation position is not lost.
+
+Fixes andyboeh/esphome-elero#4
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01WLGnJvyZ5SZbn6476pe4UU
+(cherry picked from commit 8d193f0540a6df0995eda8134136679d0a1792ce)
+---
+ components/elero/cover_sm.h            |  5 +++++
+ components/elero/device_registry.cpp   |  7 ++++---
+ components/elero/device_registry.h     |  5 +++--
+ components/elero/elero_packet.h        | 14 ++++++++++++++
+ components/elero/esp_cover_shell.h     |  3 ++-
+ components/elero_mqtt/mqtt_adapter.cpp |  6 ++++--
+ 6 files changed, 32 insertions(+), 8 deletions(-)
+
+diff --git a/components/elero/cover_sm.h b/components/elero/cover_sm.h
+index 2816511..d85f7e2 100644
+--- a/components/elero/cover_sm.h
++++ b/components/elero/cover_sm.h
+@@ -23,6 +23,11 @@ constexpr float POSITION_CLOSED = 0.0f;   ///< Fully closed (bottom)
+ constexpr float POSITION_OPEN = 1.0f;     ///< Fully open (top)
+ constexpr float NO_TARGET = -1.0f;        ///< No intermediate target position
+ 
++/// Tilt requests above this split into "step the slats open", below into
++/// "step them closed". The motors report tilt as a boolean, so a requested
++/// tilt position only ever carries a direction.
++constexpr float TILT_OPEN_THRESHOLD = 0.5f;
++
+ // ═══════════════════════════════════════════════════════════════════════════════
+ // STATES — each carries exactly its own data
+ // ═══════════════════════════════════════════════════════════════════════════════
+diff --git a/components/elero/device_registry.cpp b/components/elero/device_registry.cpp
+index 81400b9..8538fbe 100644
+--- a/components/elero/device_registry.cpp
++++ b/components/elero/device_registry.cpp
+@@ -367,19 +367,20 @@ void DeviceRegistry::set_cover_position(Device &dev, float target) {
+     notify_state_changed_(dev, now);
+ }
+ 
+-void DeviceRegistry::command_cover_tilt(Device &dev) {
++void DeviceRegistry::command_cover_tilt(Device &dev, bool open) {
+     if (!dev.is_cover()) return;
+ 
+     auto &cover = std::get<CoverDevice>(dev.logic);
+     auto ctx = cover_context(dev.config);
+     uint32_t now = millis();
+ 
+-    bool tilt_queued = enqueue_or_warn_(dev, packet::command::TILT,
++    const uint8_t cmd = open ? packet::command::TILT_UP : packet::command::TILT_DOWN;
++    bool tilt_queued = enqueue_or_warn_(dev, cmd,
+                                         packet::button::PACKETS,
+                                         packet::msg_type::BUTTON,
+                                         "command_cover_tilt");
+     (void) enqueue_check_(dev, "command_cover_tilt");
+-    cover.state = cover_sm::on_command(cover.state, packet::command::TILT, now, ctx);
++    cover.state = cover_sm::on_command(cover.state, cmd, now, ctx);
+     if (tilt_queued) {
+         cover.poll.on_command_sent(now);
+     }
+diff --git a/components/elero/device_registry.h b/components/elero/device_registry.h
+index a058db8..0b6a872 100644
+--- a/components/elero/device_registry.h
++++ b/components/elero/device_registry.h
+@@ -97,8 +97,9 @@ class DeviceRegistry {
+     /// Set a cover's target position (0.0–1.0). Determines direction, sets target, starts movement.
+     void set_cover_position(Device &dev, float target);
+ 
+-    /// Dispatch a tilt command to a cover device.
+-    void command_cover_tilt(Device &dev);
++    /// Dispatch a directional slat step to a cover device.
++    /// @param open true steps the slats open, false steps them closed.
++    void command_cover_tilt(Device &dev, bool open);
+ 
+     /// Dispatch a command byte to a light device (on/off + FSM + enqueue).
+     void command_light(Device &dev, uint8_t cmd_byte);
+diff --git a/components/elero/elero_packet.h b/components/elero/elero_packet.h
+index fc72304..45529f3 100644
+--- a/components/elero/elero_packet.h
++++ b/components/elero/elero_packet.h
+@@ -16,6 +16,7 @@
+ ///
+ /// Quick Reference - Commands:
+ ///   CHECK=0x00  STOP=0x10  UP=0x20  TILT=0x24  DOWN=0x40  INT=0x44
++///   TILT_UP=0x20  TILT_DOWN=0x40  (slat step; same bytes as UP/DOWN)
+ 
+ #pragma once
+ 
+@@ -96,6 +97,19 @@ constexpr uint8_t TILT = 0x24;                ///< Tilt position
+ constexpr uint8_t DOWN = 0x40;                ///< Move down / close
+ constexpr uint8_t INTERMEDIATE = 0x44;        ///< Move to intermediate position
+ constexpr uint8_t INVALID = 0xFF;             ///< Invalid/unknown command marker
++
++/// Directional slat step, used by DeviceRegistry::command_cover_tilt().
++///
++/// On an Elero hand transmitter a short press steps the slats one notch and a
++/// long press starts a full travel. Both press lengths send the same command
++/// byte on the default variant, so TILT_UP/TILT_DOWN alias UP/DOWN by value.
++/// They exist as separate names because the two meanings diverge on venetian
++/// (Raffstore) motors that use the extended byte set, where the full-travel
++/// commands move to 0x21/0x44 and 0x20/0x40 stay slat steps.
++///
++/// @see https://github.com/andyboeh/esphome-elero/issues/4
++constexpr uint8_t TILT_UP = UP;               ///< Step slats open (short up)
++constexpr uint8_t TILT_DOWN = DOWN;           ///< Step slats closed (short down)
+ }  // namespace command
+ 
+ // ═══════════════════════════════════════════════════════════════════════════════
+diff --git a/components/elero/esp_cover_shell.h b/components/elero/esp_cover_shell.h
+index 0f84981..80c6573 100644
+--- a/components/elero/esp_cover_shell.h
++++ b/components/elero/esp_cover_shell.h
+@@ -105,7 +105,8 @@ class EspCoverShell : public cover::Cover, public Component {
+     }
+ 
+     if (call.get_tilt().has_value()) {
+-      registry_->command_cover_tilt(*device_);
++      // HA sends a tilt position 0.0-1.0; the upper half steps the slats open.
++      registry_->command_cover_tilt(*device_, *call.get_tilt() >= cover_sm::TILT_OPEN_THRESHOLD);
+       return;
+     }
+ 
+diff --git a/components/elero_mqtt/mqtt_adapter.cpp b/components/elero_mqtt/mqtt_adapter.cpp
+index c655a35..83f08a4 100644
+--- a/components/elero_mqtt/mqtt_adapter.cpp
++++ b/components/elero_mqtt/mqtt_adapter.cpp
+@@ -381,11 +381,13 @@ void MqttAdapter::subscribe_cover_commands_(const Device &dev) {
+         });
+ 
+     ctx_.subscribe(DeviceType::COVER, addr, mqtt_topic::TILT,
+-        [this, addr](const char *, const char *) {
++        [this, addr](const char *, const char *payload) {
+             Device *d = registry_->find(addr, DeviceType::COVER);
+             if (d == nullptr) return;
+ 
+-            registry_->command_cover_tilt(*d);
++            // HA sends a tilt position 0-100; the upper half steps the slats open.
++            float tilt = static_cast<float>(atoi(payload)) / PERCENT_SCALE;
++            registry_->command_cover_tilt(*d, tilt >= cover_sm::TILT_OPEN_THRESHOLD);
+         });
+ 
+     ESP_LOGD(TAG, "Subscribed to cover commands for 0x%06x", addr);
+-- 
+2.43.0
+
