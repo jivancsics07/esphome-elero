@@ -343,13 +343,13 @@ TEST_F(CoverSmTest, StoppingCmdOverridesCooldownWithCorrectPosition) {
 
 TEST_F(CoverSmTest, IntermediateCommandIsNoOpInAllStates) {
     EXPECT_TRUE(std::holds_alternative<sm::Idle>(
-        sm::on_command(sm::Idle{0.5f}, pkt::command::DOWN_NO_TILT, 100, ctx)));
+        sm::on_command(sm::Idle{0.5f}, pkt::command::INTERMEDIATE, 100, ctx)));
     EXPECT_TRUE(std::holds_alternative<sm::Opening>(
-        sm::on_command(sm::Opening{0.5f, 0}, pkt::command::DOWN_NO_TILT, 100, ctx)));
+        sm::on_command(sm::Opening{0.5f, 0}, pkt::command::INTERMEDIATE, 100, ctx)));
     EXPECT_TRUE(std::holds_alternative<sm::Closing>(
-        sm::on_command(sm::Closing{0.5f, 0}, pkt::command::DOWN_NO_TILT, 100, ctx)));
+        sm::on_command(sm::Closing{0.5f, 0}, pkt::command::INTERMEDIATE, 100, ctx)));
     EXPECT_TRUE(std::holds_alternative<sm::Stopping>(
-        sm::on_command(sm::Stopping{0.5f, 0}, pkt::command::DOWN_NO_TILT, 100, ctx)));
+        sm::on_command(sm::Stopping{0.5f, 0}, pkt::command::INTERMEDIATE, 100, ctx)));
 }
 
 TEST_F(CoverSmTest, CmdUpWhileAlreadyOpeningIsNoOp) {

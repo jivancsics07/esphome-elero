@@ -56,7 +56,7 @@ TEST(CommandToString, AllKnownCommands) {
   EXPECT_STREQ(elero_command_to_string(command::UP), "UP");
   EXPECT_STREQ(elero_command_to_string(command::TILT_UP), "TILT");
   EXPECT_STREQ(elero_command_to_string(command::DOWN), "DOWN");
-  EXPECT_STREQ(elero_command_to_string(command::DOWN_NO_TILT), "INTERMEDIATE");
+  EXPECT_STREQ(elero_command_to_string(command::INTERMEDIATE), "INTERMEDIATE");
 }
 
 TEST(CommandToString, UnknownCommand) {
@@ -74,7 +74,7 @@ TEST(ActionToCommand, PrimaryActions) {
   EXPECT_EQ(elero_action_to_command("stop"), command::STOP);
   EXPECT_EQ(elero_action_to_command("check"), command::CHECK);
   EXPECT_EQ(elero_action_to_command("tilt"), command::TILT_UP);
-  EXPECT_EQ(elero_action_to_command("int"), command::DOWN_NO_TILT);
+  EXPECT_EQ(elero_action_to_command("int"), command::INTERMEDIATE);
 }
 
 TEST(ActionToCommand, Aliases) {
@@ -111,7 +111,7 @@ TEST(CommandToAction, AllKnownCommands) {
   EXPECT_STREQ(elero_command_to_action(command::STOP), "stop");
   EXPECT_STREQ(elero_command_to_action(command::CHECK), "check");
   EXPECT_STREQ(elero_command_to_action(command::TILT_UP), "tilt");
-  EXPECT_STREQ(elero_command_to_action(command::DOWN_NO_TILT), "int");
+  EXPECT_STREQ(elero_command_to_action(command::INTERMEDIATE), "int");
 }
 
 TEST(CommandToAction, UnknownCommand) {
@@ -126,7 +126,7 @@ TEST(CommandToAction, RoundtripWithActionToCommand) {
   EXPECT_EQ(elero_action_to_command(elero_command_to_action(command::STOP)), command::STOP);
   EXPECT_EQ(elero_action_to_command(elero_command_to_action(command::CHECK)), command::CHECK);
   EXPECT_EQ(elero_action_to_command(elero_command_to_action(command::TILT_UP)), command::TILT_UP);
-  EXPECT_EQ(elero_action_to_command(elero_command_to_action(command::DOWN_NO_TILT)), command::DOWN_NO_TILT);
+  EXPECT_EQ(elero_action_to_command(elero_command_to_action(command::INTERMEDIATE)), command::INTERMEDIATE);
 }
 
 // =============================================================================

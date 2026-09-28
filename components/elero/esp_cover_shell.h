@@ -105,7 +105,8 @@ class EspCoverShell : public cover::Cover, public Component {
     }
 
     if (call.get_tilt().has_value()) {
-      // HA sends a tilt position 0.0-1.0; the upper half steps the slats open.
+      // HA sends a tilt position 0.0-1.0; the upper half recalls the saved
+      // tilt (ventilation) position, the lower half the intermediate position.
       registry_->command_cover_tilt(*device_, *call.get_tilt() >= cover_sm::TILT_OPEN_THRESHOLD);
       return;
     }

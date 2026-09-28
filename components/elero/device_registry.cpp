@@ -395,7 +395,9 @@ void DeviceRegistry::command_cover_tilt(Device &dev, bool open) {
     auto ctx = cover_context(dev.config);
     uint32_t now = millis();
 
-    const uint8_t cmd = open ? packet::command::TILT_UP : packet::command::TILT_DOWN;
+    // Raffstore variant: the tilt buttons recall the positions stored in the
+    // motor (remote: 2x up / 2x down) instead of a single short slat step.
+    const uint8_t cmd = open ? packet::command::VENTILATION : packet::command::INTERMEDIATE;
     bool tilt_queued = enqueue_or_warn_(dev, cmd,
                                         packet::button::PACKETS,
                                         packet::msg_type::BUTTON,

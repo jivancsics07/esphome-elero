@@ -385,7 +385,8 @@ void MqttAdapter::subscribe_cover_commands_(const Device &dev) {
             Device *d = registry_->find(addr, DeviceType::COVER);
             if (d == nullptr) return;
 
-            // HA sends a tilt position 0-100; the upper half steps the slats open.
+            // HA sends a tilt position 0-100; the upper half recalls the saved
+            // tilt (ventilation) position, the lower half the intermediate position.
             float tilt = static_cast<float>(atoi(payload)) / PERCENT_SCALE;
             registry_->command_cover_tilt(*d, tilt >= cover_sm::TILT_OPEN_THRESHOLD);
         });

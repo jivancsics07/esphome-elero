@@ -116,7 +116,8 @@ TEST(GoldenConstants, CommandBytes) {
   EXPECT_EQ(command::TILT_UP, golden::CMD_UP);
   EXPECT_EQ(command::VENTILATION, golden::CMD_TILT);
   EXPECT_EQ(command::TILT_DOWN, golden::CMD_DOWN);
-  EXPECT_EQ(command::DOWN, golden::CMD_INT);
+  EXPECT_EQ(command::INTERMEDIATE, golden::CMD_INT);
+  EXPECT_EQ(command::DOWN, 0x41);  // full down, slats closed
 }
 
 TEST(GoldenConstants, StateBytes) {

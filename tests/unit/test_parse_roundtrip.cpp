@@ -90,7 +90,7 @@ TEST(TxRxRoundtrip, BasicCommandPacket) {
 TEST(TxRxRoundtrip, CommandSurvivesEncryption) {
   // The critical test: does the command byte survive build -> parse?
   uint8_t commands[] = {command::CHECK, command::STOP, command::UP,
-                        command::VENTILATION, command::DOWN, command::DOWN_NO_TILT};
+                        command::VENTILATION, command::DOWN, command::INTERMEDIATE};
 
   for (uint8_t cmd : commands) {
     SCOPED_TRACE("command: 0x" + std::to_string(cmd));

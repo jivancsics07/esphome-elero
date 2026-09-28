@@ -16,7 +16,7 @@
 ///
 /// Quick Reference - Commands (Raffstore/venetian variant, see below):
 ///   CHECK=0x00  STOP=0x10  TILT_UP=0x20  UP=0x21  VENTILATION=0x24
-///   TILT_DOWN=0x40  DOWN_NO_TILT=0x41  DOWN=0x44
+///   TILT_DOWN=0x40  DOWN=0x41  INTERMEDIATE=0x44
 
 #pragma once
 
@@ -100,10 +100,13 @@ namespace command {
 //   0x10  stop
 //   0x20  tilt step open (short up)
 //   0x21  full travel up (long up)
-//   0x24  restore saved tilt / ventilation position
+//   0x24  restore saved tilt / ventilation position (remote: 2x up)
 //   0x40  tilt step closed (short down)
-//   0x41  full down, no tilt
-//   0x44  full down + restore tilt
+//   0x41  full down, no tilt (slats stay closed)
+//   0x44  intermediate position: down + restore saved tilt (remote: 2x down)
+//
+// Home Assistant mapping: open = 0x21, close = 0x41, tilt open = 0x24,
+// tilt close = 0x44 (see DeviceRegistry::command_cover_tilt).
 //
 // Sources: Elero transmitter-stick documentation;
 // https://github.com/andyboeh/esphome-elero/issues/4
@@ -120,8 +123,8 @@ constexpr uint8_t TILT_UP = 0x20;             ///< Step slats open (short up)
 constexpr uint8_t UP = 0x21;                  ///< Move up / open (full travel)
 constexpr uint8_t VENTILATION = 0x24;         ///< Restore saved tilt/ventilation position
 constexpr uint8_t TILT_DOWN = 0x40;           ///< Step slats closed (short down)
-constexpr uint8_t DOWN_NO_TILT = 0x41;        ///< Move down fully, no tilt restore
-constexpr uint8_t DOWN = 0x44;                ///< Move down / close (full travel + tilt)
+constexpr uint8_t DOWN = 0x41;                ///< Move down / close (full travel, slats closed)
+constexpr uint8_t INTERMEDIATE = 0x44;        ///< Saved intermediate position (down + saved tilt)
 constexpr uint8_t INVALID = 0xFF;             ///< Invalid/unknown command marker
 }  // namespace command
 

@@ -56,7 +56,7 @@ const char *elero_command_to_string(uint8_t command) {
       return "TILT";
     case packet::command::DOWN:
       return "DOWN";
-    case packet::command::DOWN_NO_TILT:
+    case packet::command::INTERMEDIATE:
       return "INTERMEDIATE";
     default:
       return "UNKNOWN";
@@ -77,7 +77,7 @@ uint8_t elero_action_to_command(const char *action) {
   if (strcmp(action, action::TILT) == 0)
     return packet::command::TILT_UP;
   if (strcmp(action, action::INT) == 0)
-    return packet::command::DOWN_NO_TILT;
+    return packet::command::INTERMEDIATE;
   return packet::command::INVALID;
 }
 
@@ -88,7 +88,7 @@ const char *elero_command_to_action(uint8_t cmd_byte) {
     case packet::command::STOP: return action::STOP;
     case packet::command::CHECK: return action::CHECK;
     case packet::command::TILT_UP: return action::TILT;
-    case packet::command::DOWN_NO_TILT: return action::INT;
+    case packet::command::INTERMEDIATE: return action::INT;
     default: return nullptr;
   }
 }
