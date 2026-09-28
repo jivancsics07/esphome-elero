@@ -41,6 +41,7 @@ and commit the regenerated header.
 | Direction-aware cover tilt: `command_cover_tilt(dev, open)`, MQTT tilt payload read instead of dropped | [#62](https://github.com/manuschillerdev/esphome-elero/pull/62) | carried |
 | Packet-copy button works over plain HTTP (no `navigator.clipboard`) | [#64](https://github.com/manuschillerdev/esphome-elero/pull/64) | carried |
 | Device names up to 47 bytes instead of 23 (UTF-8 safe, v3 → v4 NVS migration on boot) | — (not yet proposed) | carried |
+| HA mapping for Raffstores: open `0x21`, close `0x41`, tilt open `0x24` (ventilation position), tilt close `0x44` (intermediate position) | never — follow-on of the remap below | stays local |
 | `elero_packet.h` command byte remap, `cover_sm.cpp` `TILT_UP`/`TILT_DOWN` branches, `elero_strings.cpp` names | never — see [#63](https://github.com/manuschillerdev/esphome-elero/issues/63) | stays local |
 
 When an upstream PR merges, drop the matching commit on the next rebase onto
