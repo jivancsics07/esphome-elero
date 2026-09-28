@@ -31,5 +31,5 @@ components/elero_web/frontend/app/dist/
 components/elero_web/mongoose.c
 components/elero_web/mongoose.h
 
-# Frontend build artifact (downloaded from GitHub release at build time)
-components/elero_web/elero_web_ui.h
+# Frontend build artifact: committed on this branch so the build never has to
+# download it from a GitHub release (rebuild with: cd components/elero_web/frontend/app && pnpm build)
