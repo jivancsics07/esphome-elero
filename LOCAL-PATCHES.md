@@ -40,6 +40,7 @@ and commit the regenerated header.
 | CC1101 health line demoted from `WARN` to `VERBOSE` | [#61](https://github.com/manuschillerdev/esphome-elero/pull/61) | carried |
 | Direction-aware cover tilt: `command_cover_tilt(dev, open)`, MQTT tilt payload read instead of dropped | [#62](https://github.com/manuschillerdev/esphome-elero/pull/62) | carried |
 | Packet-copy button works over plain HTTP (no `navigator.clipboard`) | [#64](https://github.com/manuschillerdev/esphome-elero/pull/64) | carried |
+| Device names up to 47 bytes instead of 23 (UTF-8 safe, v3 → v4 NVS migration on boot) | — (not yet proposed) | carried |
 | `elero_packet.h` command byte remap, `cover_sm.cpp` `TILT_UP`/`TILT_DOWN` branches, `elero_strings.cpp` names | never — see [#63](https://github.com/manuschillerdev/esphome-elero/issues/63) | stays local |
 
 When an upstream PR merges, drop the matching commit on the next rebase onto
