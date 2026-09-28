@@ -18,7 +18,7 @@ import {
 import { Button } from './ui/button'
 import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip'
 import { Badge } from './ui/badge'
-import { InlineEdit } from './ui/inline-edit'
+import { DEVICE_NAME_MAX_BYTES, InlineEdit } from './ui/inline-edit'
 import { SignalIndicator } from './signal-indicator'
 import { DiscoveryBanner } from './discovery-banner'
 import { DeviceExpandedPanel } from './device-row'
@@ -184,7 +184,7 @@ function NameCell({ row }: { row: Row_ }) {
       <StatusDot device={device} />
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="truncate text-sm font-medium text-foreground">
-          <InlineEdit value={device.name || fallback} onSave={(name) => updateDevice(device.address, { name })} />
+          <InlineEdit value={device.name || fallback} onSave={(name) => updateDevice(device.address, { name })} maxBytes={DEVICE_NAME_MAX_BYTES} />
         </span>
         <span className="font-mono text-[10px] text-muted-foreground">{device.address}</span>
       </div>

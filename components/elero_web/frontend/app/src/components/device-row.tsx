@@ -1,6 +1,6 @@
 import { Button } from './ui/button'
 import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip'
-import { InlineEdit } from './ui/inline-edit'
+import { DEVICE_NAME_MAX_BYTES, InlineEdit } from './ui/inline-edit'
 import { SignalIndicator } from './signal-indicator'
 import { formatTime } from './packet-table'
 import { ChevronUp, Square, ChevronDown, Shrink, Lightbulb, LightbulbOff, Settings, RotateCcw, Save, Info, Trash2 } from './icons'
@@ -42,6 +42,7 @@ export function DeviceCell({ device }: { device: Device }) {
           <InlineEdit
             value={device.name || `Unnamed cover (${device.address})`}
             onSave={(name) => updateDevice(device.address, { name })}
+            maxBytes={DEVICE_NAME_MAX_BYTES}
           />
         </span>
         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
@@ -62,6 +63,7 @@ export function LightDeviceCell({ device }: { device: Device }) {
           <InlineEdit
             value={device.name || `Unnamed light (${device.address})`}
             onSave={(name) => updateDevice(device.address, { name })}
+            maxBytes={DEVICE_NAME_MAX_BYTES}
           />
         </span>
         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">

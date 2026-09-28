@@ -2,12 +2,33 @@ import { useRef } from 'preact/hooks'
 import { useSignal, useSignalEffect } from '@preact/signals'
 import { cn } from '@/lib/utils'
 
+/** Firmware NVS_DEVICE_NAME_MAX (48) minus the NUL terminator. */
+export const DEVICE_NAME_MAX_BYTES = 47
+
 interface InlineEditProps {
   value: string
   onSave: (value: string) => void
   className?: string
   inputClassName?: string
   placeholder?: string
+  /** Maximum UTF-8 byte length (the firmware stores names in fixed byte buffers). */
+  maxBytes?: number
+}
+
+const utf8 = new TextEncoder()
+
+/** Cut a string to at most `maxBytes` UTF-8 bytes without splitting a character. */
+function clampUtf8(value: string, maxBytes: number): string {
+  if (utf8.encode(value).length <= maxBytes) return value
+  let out = ''
+  let used = 0
+  for (const ch of value) {
+    const n = utf8.encode(ch).length
+    if (used + n > maxBytes) break
+    out += ch
+    used += n
+  }
+  return out
 }
 
 export function InlineEdit({
@@ -16,6 +37,7 @@ export function InlineEdit({
   className,
   inputClassName,
   placeholder,
+  maxBytes,
 }: InlineEditProps) {
   const editing = useSignal(false)
   const draft = useSignal(value)
@@ -56,7 +78,12 @@ export function InlineEdit({
         ref={inputRef}
         type="text"
         value={draft.value}
-        onInput={(e) => { draft.value = (e.target as HTMLInputElement).value }}
+        onInput={(e) => {
+          const input = e.target as HTMLInputElement
+          const next = maxBytes ? clampUtf8(input.value, maxBytes) : input.value
+          if (next !== input.value) input.value = next
+          draft.value = next
+        }}
         onBlur={handleSave}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}

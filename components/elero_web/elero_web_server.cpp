@@ -739,6 +739,10 @@ bool EleroWebServer::parse_device_config_(JsonObject root, NvsDeviceConfig &conf
 
   const char *name = root["name"];
   if (name != nullptr) {
+    if (strlen(name) >= NVS_DEVICE_NAME_MAX) {
+      error = "Device name is too long (max 47 bytes; umlauts count as 2)";
+      return false;
+    }
     config.set_name(name);
   }
 

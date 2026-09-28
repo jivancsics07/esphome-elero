@@ -1153,3 +1153,92 @@ TEST_F(DeviceRegistryTest, HubName_HasOverrideReflectsState) {
     registry_.set_hub_name_override("");
     EXPECT_FALSE(registry_.has_hub_name_override());
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Device name storage (UTF-8 aware, v3 → v4 migration)
+// ═══════════════════════════════════════════════════════════════════════════
+
+TEST(NvsDeviceName, LongNameIsStoredInFull) {
+    NvsDeviceConfig cfg{};
+    const char *name = "Wohnzimmer Raffstore Terrasse links";  // 35 bytes, > old 23-byte limit
+    cfg.set_name(name);
+    EXPECT_STREQ(cfg.name, name);
+}
+
+TEST(NvsDeviceName, UmlautsCountAsTwoBytes) {
+    NvsDeviceConfig cfg{};
+    // 24 × "ä" = 48 bytes: only 23 characters (46 bytes) fit in 47 usable bytes.
+    std::string in;
+    for (int i = 0; i < 24; ++i) in += "\xC3\xA4";
+    cfg.set_name(in.c_str());
+    EXPECT_EQ(strlen(cfg.name), 46u);
+    EXPECT_EQ(std::string(cfg.name), in.substr(0, 46));
+}
+
+TEST(NvsDeviceName, TruncationNeverSplitsMultiByteCharacter) {
+    char buf[6]{};
+    copy_utf8_truncated(buf, sizeof(buf), "abcd\xC3\xBC");  // "abcdü" = 6 bytes, 5 fit
+    EXPECT_STREQ(buf, "abcd");
+    copy_utf8_truncated(buf, sizeof(buf), "ab\xE2\x82\xAC" "c");  // "ab€c" = 6 bytes
+    EXPECT_STREQ(buf, "ab\xE2\x82\xAC");
+    copy_utf8_truncated(buf, sizeof(buf), nullptr);
+    EXPECT_STREQ(buf, "");
+}
+
+TEST(NvsDeviceName, GroupNameTruncationIsUtf8Safe) {
+    NvsGroupConfig group{};
+    std::string in(22, 'x');
+    in += "\xC3\xB6";  // 24 bytes, only 23 fit → the "ö" must be dropped whole
+    group.set_name(in.c_str());
+    EXPECT_EQ(std::string(group.name), std::string(22, 'x'));
+}
+
+TEST(NvsDeviceConfigV3, MigratesEveryField) {
+    NvsDeviceConfigV3 old{};
+    old.version = NVS_CONFIG_VERSION_V3;
+    old.type = DeviceType::COVER;
+    old.flags = 0;  // disabled
+    old.ha_device_class = 2;
+    old.dst_address = 0xA831E5;
+    old.src_address = 0xF0D008;
+    old.channel = 4;
+    old.hop = 0x0a;
+    old.payload_1 = 0x01;
+    old.payload_2 = 0x03;
+    old.type_byte = 0x6a;
+    old.type2 = 0x00;
+    old.supports_tilt = 1;
+    old.open_duration_ms = 25000;
+    old.close_duration_ms = 24000;
+    old.dim_duration_ms = 0;
+    old.updated_at = 1234;
+    strncpy(old.name, "K\xC3\xBC" "che Raffstore", sizeof(old.name) - 1);
+
+    ASSERT_TRUE(old.is_valid());
+    NvsDeviceConfig cfg = old.migrate();
+
+    EXPECT_TRUE(cfg.is_valid());
+    EXPECT_EQ(cfg.version, NVS_CONFIG_VERSION);
+    EXPECT_EQ(cfg.type, DeviceType::COVER);
+    EXPECT_FALSE(cfg.is_enabled());
+    EXPECT_EQ(cfg.ha_device_class, 2);
+    EXPECT_EQ(cfg.dst_address, 0xA831E5u);
+    EXPECT_EQ(cfg.src_address, 0xF0D008u);
+    EXPECT_EQ(cfg.channel, 4);
+    EXPECT_EQ(cfg.hop, 0x0a);
+    EXPECT_EQ(cfg.payload_1, 0x01);
+    EXPECT_EQ(cfg.payload_2, 0x03);
+    EXPECT_EQ(cfg.type_byte, 0x6a);
+    EXPECT_EQ(cfg.supports_tilt, 1);
+    EXPECT_EQ(cfg.open_duration_ms, 25000u);
+    EXPECT_EQ(cfg.close_duration_ms, 24000u);
+    EXPECT_EQ(cfg.updated_at, 1234u);
+    EXPECT_STREQ(cfg.name, "K\xC3\xBC" "che Raffstore");
+}
+
+TEST(NvsDeviceConfigV3, NewLayoutIsNotMistakenForV3) {
+    NvsDeviceConfigV3 old{};
+    old.version = NVS_CONFIG_VERSION;  // a v4 byte pattern must not pass as v3
+    old.dst_address = 0xA831E5;
+    EXPECT_FALSE(old.is_valid());
+}

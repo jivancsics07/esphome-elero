@@ -94,9 +94,27 @@ void DeviceRegistry::restore_all() {
     }
 
     size_t restored = 0;
+    size_t migrated = 0;
     for (size_t i = 0; i < MAX_DEVICES; ++i) {
         NvsDeviceConfig cfg{};
-        if (prefs_[i].load(&cfg) && cfg.is_valid()) {
+        bool ok = prefs_[i].load(&cfg) && cfg.is_valid();
+        if (!ok) {
+            // Slot may still hold the v3 layout (24-byte name). Same key, old size.
+            auto legacy_pref = global_preferences->make_preference<NvsDeviceConfigV3>(
+                fnv1_hash("elero_device") + i);
+            NvsDeviceConfigV3 legacy{};
+            if (legacy_pref.load(&legacy) && legacy.is_valid()) {
+                cfg = legacy.migrate();
+                ok = prefs_[i].save(&cfg);
+                if (ok) {
+                    ++migrated;
+                } else {
+                    ESP_LOGW(TAG, "Failed to migrate slot %zu to config v%u", i,
+                             NVS_CONFIG_VERSION);
+                }
+            }
+        }
+        if (ok) {
             init_device(slots_[i], cfg);
             ++restored;
             ESP_LOGI(TAG, "Restored %s '%s' at 0x%06x (slot %zu)",
@@ -146,6 +164,9 @@ void DeviceRegistry::restore_all() {
              count_active(DeviceType::COVER),
              count_active(DeviceType::LIGHT),
              count_active(DeviceType::REMOTE));
+    if (migrated > 0) {
+        ESP_LOGI(TAG, "Migrated %zu device slots to config v%u", migrated, NVS_CONFIG_VERSION);
+    }
 }
 
 void DeviceRegistry::add_adapter(OutputAdapter *adapter) {
@@ -732,7 +753,7 @@ void DeviceRegistry::track_remote_(const RfPacketInfo &pkt, uint32_t now) {
     cfg.type = DeviceType::REMOTE;
     cfg.dst_address = pkt.src;
     cfg.channel = pkt.channel;
-    snprintf(cfg.name, NVS_NAME_MAX, DEFAULT_REMOTE_NAME_FMT, pkt.src);
+    snprintf(cfg.name, sizeof(cfg.name), DEFAULT_REMOTE_NAME_FMT, pkt.src);
 
     Device *slot = find_free_slot_();
     if (!slot) {
